@@ -112,16 +112,36 @@ function DashboardView({ colors }) {
   );
 }
 
+// --- UPDATED CLEANING LOGIC ---
+const cleanMarkdown = (text) => {
+  if (!text) return "";
+  
+  // 1. Split text into lines to filter out the "funny character" footer
+  const lines = text.split('\n');
+  
+  const filteredLines = lines.filter(line => {
+    const trimmed = line.trim();
+    // Remove lines starting with the strange "Ø=" characters or containing too many "&" symbols (junk)
+    if (trimmed.startsWith('Ø=') || (trimmed.match(/&/g) || []).length > 5) {
+      return false;
+    }
+    return true;
+  });
+
+  const cleanText = filteredLines.join('\n').trim();
+
+  // 2. Remove the ** and convert the text inside them to Uppercase
+  return cleanText.replace(/\*\*(.*?)\*\*/g, (match, p1) => p1.toUpperCase());
+};
+
+
 export default function App() {
-  // --- DASHBOARD TOGGLE ---
   const [view, setView] = useState("form");
 
-  // --- SEO INJECTION ---
   useEffect(() => {
     document.title = "Client Onboarding Tool | SnapCopy AI";
   }, []);
 
-  // --- STATE (ALL 24 FIELDS RESTORED) ---
   const [jobDate, setJobDate] = useState("");
   const [customerName, setCustomerName] = useState("");
   const [customerCompany, setCustomerCompany] = useState("");
@@ -225,7 +245,6 @@ export default function App() {
     doc.setTextColor(60, 60, 60);
     cursorY += 8;
     
-    // --- STRIP MAP LINKS FROM PDF ONLY ---
     const cleanOutput = output
       .split('\n')
       .filter(line => !line.toLowerCase().includes('google.com/maps') && !line.toLowerCase().includes('directions:'))
@@ -270,13 +289,16 @@ export default function App() {
         body: JSON.stringify(payload)
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Server error");
+      if (!response.ok) throw new Error(data.error || "Server error from backend");
+      
       const aiSummary = data.onboarding || "No result found.";
-      setOutput(aiSummary);
+      const polishedSummary = cleanMarkdown(aiSummary);
+      
+      setOutput(polishedSummary);
 
       await addDoc(collection(db, "client_onboarding"), {
         ...payload,
-        aiSummary: aiSummary,
+        aiSummary: polishedSummary,
         createdAt: serverTimestamp()
       });
     } catch (err) {
@@ -288,8 +310,6 @@ export default function App() {
 
   return (
     <div style={{ minHeight: "100vh", width: "100%", background: "#f0f2f5", padding: "40px 20px", fontFamily: "sans-serif" }}>
-      
-      {/* --- DASHBOARD TOGGLE BUTTON --- */}
       <button 
         onClick={() => setView(view === "form" ? "dash" : "form")}
         style={{ position: "fixed", bottom: "30px", right: "30px", zIndex: 1000, padding: "12px 24px", background: colors.primary, color: "white", border: "none", borderRadius: "50px", fontWeight: "bold", cursor: "pointer", boxShadow: "0 8px 20px rgba(0,0,0,0.15)" }}
@@ -299,7 +319,6 @@ export default function App() {
 
       {view === "form" ? (
         <div style={{ maxWidth: "800px", margin: "0 auto" }}>
-          
           <header style={{ textAlign: "center", marginBottom: "30px" }}>
             <h1 style={{ color: colors.primary, fontSize: "32px", fontWeight: "800", margin: 0 }}>Client Onboarding</h1>
             <p style={{ color: "#64748b", marginTop: "10px", marginBottom: "20px" }}>Dispatch & Scheduling Built In</p>
@@ -309,7 +328,6 @@ export default function App() {
           </header>
 
           <div style={{ background: "white", padding: "30px", borderRadius: "20px", boxShadow: "0 10px 25px rgba(0,0,0,0.05)" }}>
-            
             <Section title="1. 📋 Job Details" color={colors.primary}>
               <div style={{ display: "flex", gap: "15px", flexWrap: "wrap" }}>
                 <FormField flex="1" minWidth="200px"><InputField label="Job Date" value={jobDate} onChange={setJobDate} type="date" getInputStyle={getInputStyle} /></FormField>
