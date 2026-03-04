@@ -2,6 +2,8 @@ import { useState, useEffect } from "react";
 // --- FIREBASE ADDITIONS ---
 import { db } from "./firebase"; 
 import { collection, addDoc, serverTimestamp } from "firebase/firestore";
+// --- PDF ADDITION ---
+import { jsPDF } from "jspdf";
 
 // --- COMPONENT HELPERS ---
 function Section({ title, color, children }) {
@@ -131,6 +133,58 @@ export default function App() {
     }
   };
 
+  // --- PDF GENERATION LOGIC ---
+  const generatePDF = () => {
+    const doc = new jsPDF();
+    const margin = 20;
+    let cursorY = 20;
+
+    // Header
+    doc.setFontSize(20);
+    doc.setTextColor(217, 119, 6); // primary color
+    doc.text("Onboarding Brief", margin, cursorY);
+    
+    doc.setFontSize(10);
+    doc.setTextColor(100, 116, 139);
+    cursorY += 10;
+    doc.text(`Generated on: ${new Date().toLocaleDateString()}`, margin, cursorY);
+
+    // Horizontal Line
+    cursorY += 5;
+    doc.setDrawColor(226, 232, 240);
+    doc.line(margin, cursorY, 190, cursorY);
+
+    // Client Info Section
+    cursorY += 15;
+    doc.setFontSize(14);
+    doc.setTextColor(26, 32, 44);
+    doc.text("Customer Information", margin, cursorY);
+    
+    doc.setFontSize(11);
+    cursorY += 8;
+    doc.text(`Client: ${customerName} (${customerCompany || "N/A"})`, margin, cursorY);
+    cursorY += 6;
+    doc.text(`Email: ${customerEmail}`, margin, cursorY);
+    cursorY += 6;
+    doc.text(`Job Type: ${jobType} | Priority: ${jobPriority}`, margin, cursorY);
+
+    // AI Summary Section
+    cursorY += 15;
+    doc.setFontSize(14);
+    doc.text("Work Summary & Instructions", margin, cursorY);
+    
+    doc.setFontSize(10);
+    doc.setTextColor(60, 60, 60);
+    cursorY += 8;
+    
+    // Split text to fit page width
+    const splitText = doc.splitTextToSize(output, 170);
+    doc.text(splitText, margin, cursorY);
+
+    // Save PDF
+    doc.save(`Onboarding_${customerName.replace(/\s+/g, '_')}.pdf`);
+  };
+
   const clearForm = () => {
     setJobDate(""); setCustomerName(""); setCustomerCompany(""); setCustomerEmail("");
     setCustomerPhone(""); setCustomerAddress(""); setCustomerCity(""); setCustomerState("");
@@ -159,7 +213,6 @@ export default function App() {
     };
 
     try {
-      console.log("--- Step 1: Requesting AI Summary from Cloudflare Tunnel ---");
       const response = await fetch("https://api.snapmatrix.org/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -216,14 +269,6 @@ export default function App() {
               textDecoration: "none",
               cursor: "pointer",
               transition: "all 0.2s ease"
-            }}
-            onMouseOver={(e) => {
-              e.currentTarget.style.background = colors.primary;
-              e.currentTarget.style.color = "white";
-            }}
-            onMouseOut={(e) => {
-              e.currentTarget.style.background = "white";
-              e.currentTarget.style.color = colors.primary;
             }}
           >
             <span style={{ marginRight: "8px" }}>🚀</span> 
@@ -307,9 +352,21 @@ export default function App() {
             <div style={{ marginTop: "30px", borderTop: "2px solid #f1f5f9", paddingTop: "20px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "10px", alignItems: "center" }}>
                 <h3 style={{ margin: 0, fontSize: "16px" }}>AI Generated Summary:</h3>
-                <button onClick={copyToClipboard} style={{ padding: "6px 12px", background: copied ? colors.successGreen : "#f1f5f9", color: copied ? "white" : colors.textDark, border: "none", borderRadius: "6px", cursor: "pointer", fontSize: "12px", fontWeight: "bold" }}>
-                  {copied ? "✓ Copied" : "Copy to Clipboard"}
-                </button>
+                <div style={{ display: "flex", gap: "8px" }}>
+                    {/* NEW PDF BUTTON */}
+                    <button 
+                        onClick={generatePDF} 
+                        style={{ padding: "6px 12px", background: colors.primary, color: "white", border: "none", borderRadius: "6px", cursor: "pointer", fontSize: "12px", fontWeight: "bold" }}
+                    >
+                        📥 Download PDF Brief
+                    </button>
+                    <button 
+                        onClick={copyToClipboard} 
+                        style={{ padding: "6px 12px", background: copied ? colors.successGreen : "#f1f5f9", color: copied ? "white" : colors.textDark, border: "none", borderRadius: "6px", cursor: "pointer", fontSize: "12px", fontWeight: "bold" }}
+                    >
+                        {copied ? "✓ Copied" : "Copy to Clipboard"}
+                    </button>
+                </div>
               </div>
               <textarea readOnly value={output} style={{ width: "100%", height: "250px", padding: "15px", borderRadius: "12px", border: "1px solid #e2e8f0", backgroundColor: "#fcfcfc", lineHeight: "1.5" }} />
             </div>
