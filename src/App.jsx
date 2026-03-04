@@ -197,7 +197,7 @@ export default function App() {
         
         <header style={{ textAlign: "center", marginBottom: "30px" }}>
           <h1 style={{ color: colors.primary, fontSize: "32px", fontWeight: "800", margin: 0 }}>Client Onboarding</h1>
-          <p style={{ color: "#64748b", marginTop: "10px", marginBottom: "20px" }}>Generate professional job summaries for your team</p>
+          <p style={{ color: "#64748b", marginTop: "10px", marginBottom: "20px" }}>Dispatch & Scheduling Built In</p>
           
           <a 
             href="https://snapcopy.online" 
