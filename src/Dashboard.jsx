@@ -1,121 +1,67 @@
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState } from "react";
 import { db } from "./firebase";
 import { collection, query, orderBy, getDocs } from "firebase/firestore";
 
+// MAKE SURE THIS NAME MATCHES THE IMPORT IN APP.JSX
 export default function Dashboard() {
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterPriority, setFilterPriority] = useState("All");
 
+  const colors = {
+    primary: "#d97706",
+    lightGray: "#e2e8f0"
+  };
+
   useEffect(() => {
     const fetchJobs = async () => {
       try {
-        const q = query(
-          collection(db, "client_onboarding"),
-          orderBy("createdAt", "desc")
-        );
-
+        const q = query(collection(db, "client_onboarding"), orderBy("createdAt", "desc"));
         const querySnapshot = await getDocs(q);
-        const jobsData = querySnapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        }));
-
+        const jobsData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         setJobs(jobsData);
-      } catch (err) {
-        console.error("Error fetching jobs:", err);
-      } finally {
-        setLoading(false);
+      } catch (err) { 
+        console.error("Dashboard Fetch Error:", err); 
+      } finally { 
+        setLoading(false); 
       }
     };
-
     fetchJobs();
   }, []);
 
-  // ✅ Optimized Filtering
-  const filteredJobs = useMemo(() => {
-    return jobs.filter((j) => {
-      const priority = (j.jobPriority || "").trim().toLowerCase();
-      const address = (j.customerAddress || "").toLowerCase();
-
-      const matchPriority =
-        filterPriority === "All" ||
-        priority === filterPriority.toLowerCase();
-
-      const matchAddress =
-        address.includes(searchTerm.toLowerCase());
-
-      return matchPriority && matchAddress;
-    });
-  }, [jobs, filterPriority, searchTerm]);
+  // Filtering Logic
+  const filteredJobs = jobs.filter(job => {
+    const matchesPriority = filterPriority === "All" || job.jobPriority === filterPriority;
+    const address = job.customerAddress || "";
+    const matchesAddress = address.toLowerCase().includes(searchTerm.toLowerCase());
+    return matchesPriority && matchesAddress;
+  });
 
   return (
-    <div
-      style={{
-        padding: "40px",
-        backgroundColor: "#f4f6f9",
-        minHeight: "100vh",
-        fontFamily: "Arial, sans-serif",
-      }}
-    >
-      <h1
-        style={{
-          textAlign: "center",
-          marginBottom: "30px",
-          color: "#d97706",
-        }}
-      >
-        Onboarding Dashboard
-      </h1>
+    <div style={{ padding: "40px", background: "#f0f2f5", minHeight: "100vh", fontFamily: "sans-serif" }}>
+      <h1 style={{ textAlign: "center", color: colors.primary }}>Onboarding Dashboard</h1>
 
-      {/* ✅ FILTER SECTION */}
-      <div
-        style={{
-          backgroundColor: "#ffffff",
-          padding: "20px",
-          borderRadius: "12px",
-          marginBottom: "30px",
-          boxShadow: "0 4px 10px rgba(0,0,0,0.05)",
-          display: "flex",
-          flexWrap: "wrap",
-          gap: "20px",
-        }}
-      >
-        {/* Address Filter */}
-        <div style={{ flex: "1 1 300px", display: "flex", flexDirection: "column" }}>
-          <label style={{ marginBottom: "6px", fontWeight: "bold" }}>
-            Search by Address
-          </label>
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Enter street name..."
-            style={{
-              padding: "10px",
-              borderRadius: "6px",
-              border: "1px solid #ccc",
-              fontSize: "14px",
-            }}
+      {/* --- FILTER SECTION --- */}
+      <div style={{ 
+        background: "white", padding: "20px", borderRadius: "15px", marginBottom: "20px", 
+        border: "3px solid #d97706", display: "flex", gap: "20px" 
+      }}>
+        <div style={{ flex: 2 }}>
+          <label style={{ fontWeight: "bold", fontSize: "12px" }}>🔍 ADDRESS SEARCH</label>
+          <input 
+            style={{ width: "100%", padding: "10px", borderRadius: "5px", border: "1px solid #ccc" }} 
+            placeholder="Search street..." 
+            value={searchTerm} 
+            onChange={(e) => setSearchTerm(e.target.value)} 
           />
         </div>
-
-        {/* Priority Filter */}
-        <div style={{ flex: "1 1 200px", display: "flex", flexDirection: "column" }}>
-          <label style={{ marginBottom: "6px", fontWeight: "bold" }}>
-            Filter by Priority
-          </label>
-          <select
-            value={filterPriority}
+        <div style={{ flex: 1 }}>
+          <label style={{ fontWeight: "bold", fontSize: "12px" }}>⚡ PRIORITY</label>
+          <select 
+            style={{ width: "100%", padding: "10px", borderRadius: "5px", border: "1px solid #ccc" }} 
+            value={filterPriority} 
             onChange={(e) => setFilterPriority(e.target.value)}
-            style={{
-              padding: "10px",
-              borderRadius: "6px",
-              border: "1px solid #ccc",
-              fontSize: "14px",
-              backgroundColor: "white",
-            }}
           >
             <option value="All">All</option>
             <option value="Urgent">Urgent</option>
@@ -126,48 +72,13 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* JOB LIST */}
-      {loading ? (
-        <p>Loading...</p>
-      ) : filteredJobs.length === 0 ? (
-        <p>No jobs match your filters.</p>
-      ) : (
-        <div style={{ display: "grid", gap: "15px" }}>
-          {filteredJobs.map((job) => (
-            <div
-              key={job.id}
-              style={{
-                backgroundColor: "white",
-                padding: "20px",
-                borderRadius: "12px",
-                borderLeft: "6px solid #d97706",
-                boxShadow: "0 3px 8px rgba(0,0,0,0.04)",
-              }}
-            >
-              <h3 style={{ margin: "0 0 8px 0" }}>
-                {job.customerName || "Unnamed Client"}{" "}
-                <span style={{ color: "#dc2626" }}>
-                  ({job.jobPriority || "No Priority"})
-                </span>
-              </h3>
-
-              <p style={{ margin: "4px 0" }}>
-                <strong>Address:</strong>{" "}
-                {job.customerAddress || "No address provided"}
-              </p>
-
-              {job.aiSummary && (
-                <p
-                  style={{
-                    marginTop: "10px",
-                    fontSize: "13px",
-                    fontStyle: "italic",
-                    color: "#555",
-                  }}
-                >
-                  {job.aiSummary.substring(0, 120)}...
-                </p>
-              )}
+      {loading ? <p>Loading Data...</p> : (
+        <div style={{ display: "grid", gap: "20px" }}>
+          {filteredJobs.map(job => (
+            <div key={job.id} style={{ background: "white", padding: "20px", borderRadius: "15px", borderLeft: "8px solid #d97706" }}>
+              <h3>{job.customerName} <span style={{fontSize: '12px', color: '#64748b'}}>({job.customerCompany})</span></h3>
+              <p><strong>Address:</strong> {job.customerAddress}</p>
+              <p><strong>Priority:</strong> {job.jobPriority}</p>
             </div>
           ))}
         </div>
