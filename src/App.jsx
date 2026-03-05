@@ -216,7 +216,7 @@ export default function App() {
     };
 
     try {
-      const response = await fetch("https://api.snapmatrix.org/generate", {
+      const response = await fetch("https://api.snapcopy.online/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
