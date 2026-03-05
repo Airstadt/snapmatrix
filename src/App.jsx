@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 // --- FIREBASE ADDITIONS ---
 import { db } from "./firebase"; 
 import { collection, addDoc, serverTimestamp, query, orderBy, getDocs } from "firebase/firestore"; 
+import Dashboard from "./Dashboard"
 // --- PDF ADDITION ---
 import { jsPDF } from "jspdf";
 
