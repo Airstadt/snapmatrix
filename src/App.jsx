@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
 // --- FIREBASE ADDITIONS ---
 import { db } from "./firebase"; 
-import { collection, addDoc, serverTimestamp, query, orderBy, getDocs } from "firebase/firestore"; 
-import Dashboard from "./Dashboard"
+import { collection, addDoc, serverTimestamp } from "firebase/firestore"; 
+import Dashboard from "./Dashboard";
 // --- PDF ADDITION ---
 import { jsPDF } from "jspdf";
 
@@ -62,79 +62,20 @@ function TextAreaField({ label, value, onChange, placeholder, getInputStyle }) {
   );
 }
 
-// --- DASHBOARD VIEW COMPONENT ---
-function DashboardView({ colors }) {
-  const [jobs, setJobs] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const fetchJobs = async () => {
-      try {
-        const q = query(collection(db, "client_onboarding"), orderBy("createdAt", "desc"));
-        const querySnapshot = await getDocs(q);
-        const jobsData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        setJobs(jobsData);
-      } catch (err) {
-        console.error("Dashboard Fetch Error:", err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchJobs();
-  }, []);
-
-  return (
-    <div style={{ maxWidth: "1000px", margin: "0 auto" }}>
-      <header style={{ textAlign: "center", marginBottom: "30px" }}>
-        <h1 style={{ color: colors.primary, fontSize: "32px", fontWeight: "800", margin: 0 }}>Onboarding Dashboard</h1>
-        <p style={{ color: "#64748b", marginTop: "10px" }}>Database: client_onboarding</p>
-      </header>
-
-      {loading ? (
-        <p style={{ textAlign: "center" }}>Loading Database Records...</p>
-      ) : (
-        <div style={{ display: "grid", gap: "20px" }}>
-          {jobs.map((job) => (
-            <div key={job.id} style={{ background: "white", padding: "20px", borderRadius: "15px", boxShadow: "0 4px 12px rgba(0,0,0,0.05)", borderLeft: `5px solid ${colors.primary}` }}>
-              <div style={{ display: "flex", justifyContent: "space-between" }}>
-                <h3 style={{ margin: 0 }}>{job.customerName} <span style={{ fontSize: "12px", color: "#94a3b8", fontWeight: "normal" }}>({job.customerCompany || "N/A"})</span></h3>
-                <span style={{ fontSize: "12px", fontWeight: "bold", color: colors.primary }}>{job.jobType} - {job.jobPriority}</span>
-              </div>
-              <p style={{ fontSize: "14px", color: "#475569", margin: "5px 0" }}><strong>Location:</strong> {job.customerAddress}, {job.customerCity} {job.customerState}</p>
-              <p style={{ fontSize: "14px", color: "#475569", margin: "5px 0" }}><strong>Schedule:</strong> {job.jobStartDate} at {job.jobStartTime}</p>
-              <div style={{ marginTop: "10px", padding: "10px", background: "#f8fafc", borderRadius: "8px", fontSize: "13px" }}>
-                <strong>AI Summary Snippet:</strong> {job.aiSummary?.substring(0, 150)}...
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
 // --- UPDATED CLEANING LOGIC ---
 const cleanMarkdown = (text) => {
   if (!text) return "";
-  
-  // 1. Split text into lines to filter out the "funny character" footer
   const lines = text.split('\n');
-  
   const filteredLines = lines.filter(line => {
     const trimmed = line.trim();
-    // Remove lines starting with the strange "Ø=" characters or containing too many "&" symbols (junk)
     if (trimmed.startsWith('Ø=') || (trimmed.match(/&/g) || []).length > 5) {
       return false;
     }
     return true;
   });
-
   const cleanText = filteredLines.join('\n').trim();
-
-  // 2. Remove the ** and convert the text inside them to Uppercase
   return cleanText.replace(/\*\*(.*?)\*\*/g, (match, p1) => p1.toUpperCase());
 };
-
 
 export default function App() {
   const [view, setView] = useState("form");
@@ -143,6 +84,7 @@ export default function App() {
     document.title = "Client Onboarding Tool | SnapCopy AI";
   }, []);
 
+  // --- FIELDS ---
   const [jobDate, setJobDate] = useState("");
   const [customerName, setCustomerName] = useState("");
   const [customerCompany, setCustomerCompany] = useState("");
@@ -211,25 +153,20 @@ export default function App() {
     const doc = new jsPDF();
     const margin = 20;
     let cursorY = 20;
-
     doc.setFontSize(20);
     doc.setTextColor(217, 119, 6); 
     doc.text("Onboarding Brief", margin, cursorY);
-    
     doc.setFontSize(10);
     doc.setTextColor(100, 116, 139);
     cursorY += 10;
     doc.text(`Generated on: ${new Date().toLocaleDateString()}`, margin, cursorY);
-
     cursorY += 5;
     doc.setDrawColor(226, 232, 240);
     doc.line(margin, cursorY, 190, cursorY);
-
     cursorY += 15;
     doc.setFontSize(14);
     doc.setTextColor(26, 32, 44);
     doc.text("Customer Information", margin, cursorY);
-    
     doc.setFontSize(11);
     cursorY += 8;
     doc.text(`Client: ${customerName} (${customerCompany || "N/A"})`, margin, cursorY);
@@ -237,23 +174,18 @@ export default function App() {
     doc.text(`Email: ${customerEmail}`, margin, cursorY);
     cursorY += 6;
     doc.text(`Job Type: ${jobType} | Priority: ${jobPriority}`, margin, cursorY);
-
     cursorY += 15;
     doc.setFontSize(14);
     doc.text("Work Summary & Instructions", margin, cursorY);
-    
     doc.setFontSize(10);
     doc.setTextColor(60, 60, 60);
     cursorY += 8;
-    
     const cleanOutput = output
       .split('\n')
-      .filter(line => !line.toLowerCase().includes('google.com/maps') && !line.toLowerCase().includes('directions:'))
+      .filter(line => !line.toLowerCase().includes('maps.google.com') && !line.toLowerCase().includes('directions:'))
       .join('\n');
-
     const splitText = doc.splitTextToSize(cleanOutput, 170);
     doc.text(splitText, margin, cursorY);
-
     doc.save(`Onboarding_${customerName.replace(/\s+/g, '_')}.pdf`);
   };
 
@@ -268,8 +200,8 @@ export default function App() {
   };
 
   async function generate() {
-    if (!jobDate || !customerName || !customerEmail || !customerAddress || !jobType || !jobDescription) {
-      setError("Please fill out all required fields");
+    if (!customerName || !customerAddress || !jobType || !jobDescription) {
+      setError("Missing key info: Name, Address, Job Type, and Description are required.");
       return;
     }
     setError("");
@@ -290,11 +222,10 @@ export default function App() {
         body: JSON.stringify(payload)
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Server error from backend");
+      if (!response.ok) throw new Error(data.error || "Backend is offline");
       
       const aiSummary = data.onboarding || "No result found.";
       const polishedSummary = cleanMarkdown(aiSummary);
-      
       setOutput(polishedSummary);
 
       await addDoc(collection(db, "client_onboarding"), {
@@ -303,7 +234,7 @@ export default function App() {
         createdAt: serverTimestamp()
       });
     } catch (err) {
-      setError(`System Error: ${err.message}`);
+      setError(`System Error: ${err.message}. Ensure the backend is running.`);
     } finally {
       setLoading(false);
     }
@@ -311,6 +242,33 @@ export default function App() {
 
   return (
     <div style={{ minHeight: "100vh", width: "100%", background: "#f0f2f5", padding: "40px 20px", fontFamily: "sans-serif" }}>
+      
+      {/* RESTORED: SnapCopy Orange & White Button */}
+      <div style={{ display: "flex", justifyContent: "center", marginBottom: "30px" }}>
+        <a 
+          href="https://snapcopy.online" 
+          target="_blank" 
+          rel="noopener noreferrer"
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            padding: "10px 25px",
+            background: "white",
+            color: colors.primary,
+            borderRadius: "50px",
+            textDecoration: "none",
+            fontWeight: "bold",
+            border: `2px solid ${colors.primary}`,
+            boxShadow: "0 4px 15px rgba(217, 119, 6, 0.2)",
+            transition: "transform 0.2s"
+          }}
+          onMouseOver={(e) => e.currentTarget.style.transform = "scale(1.05)"}
+          onMouseOut={(e) => e.currentTarget.style.transform = "scale(1)"}
+        >
+          <span style={{ marginRight: "10px" }}>✨</span> Visit SnapCopy.online
+        </a>
+      </div>
+
       <button 
         onClick={() => setView(view === "form" ? "dash" : "form")}
         style={{ position: "fixed", bottom: "30px", right: "30px", zIndex: 1000, padding: "12px 24px", background: colors.primary, color: "white", border: "none", borderRadius: "50px", fontWeight: "bold", cursor: "pointer", boxShadow: "0 8px 20px rgba(0,0,0,0.15)" }}
@@ -323,9 +281,6 @@ export default function App() {
           <header style={{ textAlign: "center", marginBottom: "30px" }}>
             <h1 style={{ color: colors.primary, fontSize: "32px", fontWeight: "800", margin: 0 }}>Client Onboarding</h1>
             <p style={{ color: "#64748b", marginTop: "10px", marginBottom: "20px" }}>Dispatch & Scheduling Built In</p>
-            <a href="https://snapcopy.online" target="_blank" rel="noopener noreferrer" style={{ display: "inline-flex", alignItems: "center", padding: "8px 20px", background: "white", color: colors.primary, border: `2px solid ${colors.primary}`, borderRadius: "30px", fontWeight: "bold", fontSize: "14px", textDecoration: "none" }}>
-              <span style={{ marginRight: "8px" }}>🚀</span> Visit SnapCopy AI
-            </a>
           </header>
 
           <div style={{ background: "white", padding: "30px", borderRadius: "20px", boxShadow: "0 10px 25px rgba(0,0,0,0.05)" }}>
@@ -402,7 +357,7 @@ export default function App() {
           </div>
         </div>
       ) : (
-        <DashboardView colors={colors} />
+        <Dashboard /> 
       )}
     </div>
   );
