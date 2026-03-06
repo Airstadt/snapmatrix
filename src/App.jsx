@@ -78,6 +78,7 @@ const cleanMarkdown = (text) => {
 };
 
 export default function App() {
+  // SET TO "form" by default. 
   const [view, setView] = useState("form");
 
   useEffect(() => {
@@ -243,7 +244,6 @@ export default function App() {
   return (
     <div style={{ minHeight: "100vh", width: "100%", background: "#f0f2f5", padding: "40px 20px", fontFamily: "sans-serif" }}>
       
-      {/* RESTORED: SnapCopy Orange & White Button */}
       <div style={{ display: "flex", justifyContent: "center", marginBottom: "30px" }}>
         <a 
           href="https://snapcopy.online" 
@@ -269,9 +269,23 @@ export default function App() {
         </a>
       </div>
 
+      {/* DASHBOARD TOGGLE BUTTON - NOW ENABLED */}
       <button 
         onClick={() => setView(view === "form" ? "dash" : "form")}
-        style={{ position: "fixed", bottom: "30px", right: "30px", zIndex: 1000, padding: "12px 24px", background: colors.primary, color: "white", border: "none", borderRadius: "50px", fontWeight: "bold", cursor: "pointer", boxShadow: "0 8px 20px rgba(0,0,0,0.15)" }}
+        style={{ 
+          position: "fixed", 
+          bottom: "30px", 
+          right: "30px", 
+          zIndex: 1000, 
+          padding: "12px 24px", 
+          background: colors.primary, 
+          color: "white", 
+          border: "none", 
+          borderRadius: "50px", 
+          fontWeight: "bold", 
+          cursor: "pointer", 
+          boxShadow: "0 8px 20px rgba(0,0,0,0.15)" 
+        }}
       >
         {view === "form" ? "📊 View Dashboard" : "📝 Back to Form"}
       </button>
@@ -280,7 +294,7 @@ export default function App() {
         <div style={{ maxWidth: "800px", margin: "0 auto" }}>
           <header style={{ textAlign: "center", marginBottom: "30px" }}>
             <h1 style={{ color: colors.primary, fontSize: "32px", fontWeight: "800", margin: 0 }}>Client Onboarding</h1>
-            <p style={{ color: "#64748b", marginTop: "10px", marginBottom: "20px" }}>Dispatch & Scheduling Built In</p>
+            <p style={{ color: "#64748b", marginTop: "10px", marginBottom: "20px" }}>Dispatch & Scheduling Built In. Manage your jobs and team in one place.</p>
           </header>
 
           <div style={{ background: "white", padding: "30px", borderRadius: "20px", boxShadow: "0 10px 25px rgba(0,0,0,0.05)" }}>
