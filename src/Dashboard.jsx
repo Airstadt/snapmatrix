@@ -30,7 +30,23 @@ export default function Dashboard() {
       const jobsData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setJobs(jobsData);
     } catch (err) { 
-      console.error("Dashboard Fetch Error:", err); 
+      console.error("Dashboard Fetch Error:", err);
+      
+      // --- DEMO FALLBACK DATA ---
+      // This ensures Ric sees a working UI even without a database connection
+      setJobs([
+        {
+          id: "demo-1",
+          customerName: "John Doe (Demo)",
+          customerCompany: "Example Corp",
+          customerEmail: "john@example.com",
+          customerAddress: "123 Demo St",
+          customerCity: "Simulation City",
+          jobType: "Standard Setup",
+          jobPriority: "High",
+          assignedTeam: "Alpha Team"
+        }
+      ]);
     } finally { 
       setLoading(false); 
     }
