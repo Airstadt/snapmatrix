@@ -1,10 +1,6 @@
 import React, { useState, useEffect } from "react";
-import { db } from "./firebase";
-import { 
-  collection, onSnapshot, query, orderBy, 
-  doc, updateDoc, setDoc, getDoc, deleteField
-} from "firebase/firestore";
 
+// Note: All Firebase/Database imports have been stripped.
 const WORK_START_HOUR = 8;
 const WORK_END_HOUR = 18;
 
@@ -31,7 +27,6 @@ export default function ServiceGantt({ setView }) {
   const [allClients, setAllClients] = useState([]);
   const [currentDate, setCurrentDate] = useState(new Date().toISOString().split('T')[0]);
   const [editingClient, setEditingClient] = useState(null); 
-  const [isDemo, setIsDemo] = useState(true); // DEMO MODE TOGGLE
 
   // --- MOCK DATA FOR DEMO ---
   const mockTechs = [
@@ -60,122 +55,44 @@ export default function ServiceGantt({ setView }) {
     timeSlots.push(`${h}:00`, `${h}:30`);
   }
 
-  // --- DATA SYNC ---
+  // --- LOCAL DATA LOAD ---
   useEffect(() => {
-    if (isDemo) {
-        setActiveSchedule(mockTechs);
-        setAllClients(mockClients);
-        return;
-    }
+    setActiveSchedule(mockTechs);
+    setAllClients(mockClients);
+  }, [currentDate]);
 
-    const unsubTechs = onSnapshot(query(collection(db, "technicians"), orderBy("techName", "asc")), (techSnap) => {
-      const techs = techSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-      const unsubJobs = onSnapshot(collection(db, "schedule"), (jobSnap) => {
-        const jobData = jobSnap.docs.reduce((acc, doc) => {
-          acc[doc.data().techName] = { id: doc.id, jobs: doc.data().jobs || [] };
-          return acc;
-        }, {});
-
-        const mergedSchedule = techs.map(t => ({
-          ...t,
-          scheduleDocId: jobData[t.techName]?.id || t.id, 
-          jobs: jobData[t.techName]?.jobs || []
-        }));
-        setActiveSchedule(mergedSchedule);
-      });
-      return () => unsubJobs();
-    });
-    return () => unsubTechs();
-  }, [isDemo, currentDate]);
-
-  useEffect(() => {
-    if (isDemo) return;
-    const q = query(collection(db, "client_onboarding"), orderBy("createdAt", "desc"));
-    return onSnapshot(q, (snap) => setAllClients(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
-  }, [isDemo]);
-
-  // --- DELETE FROM SCHEDULE LOGIC ---
-  const handleRemoveFromSchedule = async () => {
+  // --- LOCAL HANDLERS ---
+  const handleRemoveFromSchedule = () => {
     if (!window.confirm("Remove this client from the schedule?")) return;
-    
-    const { id, assignedTeam } = editingClient;
-
-    if (isDemo) {
-        setActiveSchedule(prev => prev.map(t => ({
-            ...t, jobs: t.jobs.filter(j => j.jobId !== id)
-        })));
-        setAllClients(prev => prev.map(c => c.id === id ? {...c, assignedTeam: null} : c));
-        setEditingClient(null);
-        return;
-    }
-
-    try {
-      await updateDoc(doc(db, "client_onboarding", id), {
-        assignedTeam: deleteField(), startDate: deleteField(), startTime: deleteField(), stopTime: deleteField()
-      });
-      if (assignedTeam) {
-        const targetTech = activeSchedule.find(t => t.techName === assignedTeam);
-        const scheduleRef = doc(db, "schedule", targetTech?.scheduleDocId || assignedTeam);
-        const scheduleSnap = await getDoc(scheduleRef);
-        if (scheduleSnap.exists()) {
-          const filteredJobs = (scheduleSnap.data().jobs || []).filter(j => j.jobId !== id);
-          await updateDoc(scheduleRef, { jobs: filteredJobs });
-        }
-      }
-      setEditingClient(null);
-    } catch (err) { console.error("Delete error:", err); }
+    const { id } = editingClient;
+    setActiveSchedule(prev => prev.map(t => ({...t, jobs: t.jobs.filter(j => j.jobId !== id)})));
+    setAllClients(prev => prev.map(c => c.id === id ? {...c, assignedTeam: null} : c));
+    setEditingClient(null);
   };
 
-  // --- SAVE HANDLER ---
-  const handleManualSave = async (e) => {
+  const handleManualSave = (e) => {
     if (e) e.preventDefault();
-    const { id, customerName, assignedTeam, startTime, stopTime, startDate, notes } = editingClient;
+    const { id, customerName, assignedTeam, startTime, stopTime, startDate } = editingClient;
     const finalDate = startDate || currentDate;
-
-    if (isDemo) {
-        setActiveSchedule(prev => prev.map(t => {
-            const cleanJobs = t.jobs.filter(j => j.jobId !== id);
-            if (t.techName === assignedTeam) {
-                return { ...t, jobs: [...cleanJobs, { jobId: id, clientName: customerName, startTime, endTime: stopTime, date: finalDate }] };
-            }
-            return { ...t, jobs: cleanJobs };
-        }));
-        setEditingClient(null);
-        return;
-    }
-
-    if (!assignedTeam || !startTime || !stopTime) return alert("Missing Info");
-
-    try {
-      await updateDoc(doc(db, "client_onboarding", id), {
-        assignedTeam, startDate: finalDate, startTime, stopTime, notes: notes || ""
-      });
-      const targetTech = activeSchedule.find(t => t.techName === assignedTeam);
-      const scheduleRef = doc(db, "schedule", targetTech?.scheduleDocId || assignedTeam);
-      const scheduleSnap = await getDoc(scheduleRef);
-      const updatedJobEntry = { jobId: id, clientName: customerName, startTime, endTime: stopTime, date: finalDate };
-      
-      if (scheduleSnap.exists()) {
-        const filteredJobs = (scheduleSnap.data().jobs || []).filter(j => j.jobId !== id);
-        await updateDoc(scheduleRef, { jobs: [...filteredJobs, updatedJobEntry], techName: assignedTeam });
-      } else {
-        await setDoc(scheduleRef, { techName: assignedTeam, jobs: [updatedJobEntry] });
-      }
-      setEditingClient(null);
-    } catch (error) { console.error("Update error:", error); }
+    setActiveSchedule(prev => prev.map(t => {
+        const cleanJobs = t.jobs.filter(j => j.jobId !== id);
+        if (t.techName === assignedTeam) {
+            return { ...t, jobs: [...cleanJobs, { jobId: id, clientName: customerName, startTime, endTime: stopTime, date: finalDate }] };
+        }
+        return { ...t, jobs: cleanJobs };
+    }));
+    setEditingClient(null);
   };
 
-  // --- REFINED DRAG & DROP ---
   const handleDragStart = (e, client) => {
     e.dataTransfer.setData("clientId", client.id || client.jobId);
     e.dataTransfer.setData("clientName", client.customerName || client.clientName);
   };
 
-  const handleDrop = async (e, tech) => {
+  const handleDrop = (e, tech) => {
     e.preventDefault();
     const clientId = e.dataTransfer.getData("clientId");
     const clientName = e.dataTransfer.getData("clientName");
-    
     const rect = e.currentTarget.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const dropMinutes = (x / rect.width) * ((WORK_END_HOUR - WORK_START_HOUR) * 60);
@@ -184,48 +101,23 @@ export default function ServiceGantt({ setView }) {
     const startTime = `${hour}:${min === 0 ? "00" : min.toString().padStart(2, '0')}`;
     const stopTime = `${hour + 2}:${min === 0 ? "00" : min.toString().padStart(2, '0')}`;
 
-    if (isDemo) {
-        setActiveSchedule(prev => prev.map(t => {
-            const filtered = t.jobs.filter(j => j.jobId !== clientId);
-            if (t.id === tech.id) {
-                return { ...t, jobs: [...filtered, { jobId: clientId, clientName, startTime, endTime: stopTime, date: currentDate }] };
-            }
-            return { ...t, jobs: filtered };
-        }));
-        setAllClients(prev => prev.map(c => c.id === clientId ? { ...c, assignedTeam: tech.techName, startDate: currentDate, startTime, stopTime } : c));
-        return;
-    }
-
-    await updateDoc(doc(db, "client_onboarding", clientId), {
-      assignedTeam: tech.techName, startDate: currentDate, startTime, stopTime
-    });
-    
-    activeSchedule.forEach(async (t) => {
-        const ref = doc(db, "schedule", t.scheduleDocId || t.techName);
-        const snap = await getDoc(ref);
-        if (snap.exists()) {
-            const jobs = snap.data().jobs || [];
-            const filtered = jobs.filter(j => j.jobId !== clientId);
-            if (t.id === tech.id) {
-                await updateDoc(ref, { jobs: [...filtered, { jobId: clientId, clientName, startTime, endTime: stopTime, date: currentDate }] });
-            } else {
-                await updateDoc(ref, { jobs: filtered });
-            }
-        } else if (t.id === tech.id) {
-            await setDoc(ref, { techName: tech.techName, jobs: [{ jobId: clientId, clientName, startTime, endTime: stopTime, date: currentDate }] });
+    setActiveSchedule(prev => prev.map(t => {
+        const filtered = t.jobs.filter(j => j.jobId !== clientId);
+        if (t.id === tech.id) {
+            return { ...t, jobs: [...filtered, { jobId: clientId, clientName, startTime, endTime: stopTime, date: currentDate }] };
         }
-    });
+        return { ...t, jobs: filtered };
+    }));
+    setAllClients(prev => prev.map(c => c.id === clientId ? { ...c, assignedTeam: tech.techName, startDate: currentDate, startTime, stopTime } : c));
   };
 
   return (
     <div style={{ backgroundColor: "#f1f5f9", height: "100vh", display: "flex", flexDirection: "column", fontFamily: "sans-serif" }}>
       
-      {isDemo && (
-        <div style={{ background: "#2563eb", color: "white", padding: "8px 25px", fontSize: "12px", fontWeight: "bold", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <span>🚀 DEMO MODE: Date changes will refresh the grid. Drag jobs to any time/date.</span>
-            <button onClick={() => setIsDemo(false)} style={{ background: "white", color: "#2563eb", border: "none", padding: "4px 12px", borderRadius: "4px", cursor: "pointer", fontSize: "11px" }}>Go Live</button>
-        </div>
-      )}
+      {/* Banner is preserved, but the "Go Live" button is removed */}
+      <div style={{ background: "#2563eb", color: "white", padding: "8px 25px", fontSize: "12px", fontWeight: "bold", display: "flex", justifyContent: "center", alignItems: "center" }}>
+          <span>🚀 DEMO MODE: Date changes will refresh the grid. Drag jobs to any time/date.</span>
+      </div>
 
       <header style={{ padding: "12px 25px", background: "white", borderBottom: "1px solid #e2e8f0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "15px" }}>
@@ -250,7 +142,6 @@ export default function ServiceGantt({ setView }) {
             <div key={tech.id} style={{ display: "flex", borderBottom: "1px solid #f1f5f9", minHeight: "95px" }}>
               <div style={{ width: "220px", padding: "20px", fontWeight: "700", borderRight: "1px solid #f1f5f9", display: "flex", alignItems: "center", background: "#fff" }}>{tech.techName}</div>
               <div onDragOver={(e) => e.preventDefault()} onDrop={(e) => handleDrop(e, tech)} style={{ flex: 1, position: "relative", background: "repeating-linear-gradient(90deg, transparent, transparent calc(10% - 1px), #f8fafc 10%)" }}>
-                {/* GRID FILTERING LOGIC IS HERE */}
                 {tech.jobs?.filter(j => j.date === currentDate).map((job, idx) => (
                   <div key={idx} 
                     draggable
