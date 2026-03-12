@@ -5,8 +5,9 @@ import ProductionOnboarding from "./ProductionOnboarding";
 import InventoryDashboard from "./InventoryDashboard";
 import ReceivingModule from "./ReceivingModule"; 
 import Dashboard from "./Dashboard"; 
-// NEW MODULE IMPORT
 import ManufacturedProductRecord from "./ManufacturedProductRecord"; 
+// NEW MODULE IMPORT
+import ServiceGantt from "./ServiceGantt";
 
 const POModule = lazy(() => import("./pomodule"));
 
@@ -24,31 +25,37 @@ export default function App() {
     accentGreen: "#059669",
     accentPurple: "#7c3aed",
     accentRose: "#e11d48",
-    accentTeal: "#0d9488" 
+    accentTeal: "#0d9488",
+    accentViolet: "#8b5cf6" 
   };
 
-  const MenuCard = ({ title, icon, description, target, color }) => (
+  const MenuCard = ({ title, icon, description, target, color, disabled }) => (
     <div 
-      onClick={() => setView(target)}
+      onClick={() => !disabled && setView(target)}
       style={{
         background: colors.cardBg,
         padding: "30px",
         borderRadius: "16px",
         boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)",
-        cursor: "pointer",
+        cursor: disabled ? "default" : "pointer",
         transition: "all 0.2s ease",
         borderTop: `6px solid ${color}`,
         display: "flex",
         flexDirection: "column",
-        gap: "10px"
+        gap: "10px",
+        opacity: disabled ? 0.7 : 1
       }}
       onMouseEnter={(e) => {
-        e.currentTarget.style.transform = "translateY(-5px)";
-        e.currentTarget.style.boxShadow = "0 10px 15px -3px rgb(0 0 0 / 0.1)";
+        if(!disabled) {
+          e.currentTarget.style.transform = "translateY(-5px)";
+          e.currentTarget.style.boxShadow = "0 10px 15px -3px rgb(0 0 0 / 0.1)";
+        }
       }}
       onMouseLeave={(e) => {
-        e.currentTarget.style.transform = "translateY(0)";
-        e.currentTarget.style.boxShadow = "0 4px 6px -1px rgb(0 0 0 / 0.1)";
+        if(!disabled) {
+          e.currentTarget.style.transform = "translateY(0)";
+          e.currentTarget.style.boxShadow = "0 4px 6px -1px rgb(0 0 0 / 0.1)";
+        }
       }}
     >
       <span style={{ fontSize: "32px" }}>{icon}</span>
@@ -88,7 +95,6 @@ export default function App() {
         {view === "home" && (
           <div style={{ maxWidth: "1000px", margin: "0 auto" }}>
             
-            {/* Branding Link Addition */}
             <div style={{ display: "flex", justifyContent: "flex-start", marginBottom: "30px" }}>
               <a 
                 href="https://snapcopy.online" 
@@ -114,14 +120,28 @@ export default function App() {
             </div>
 
             <header style={{ marginBottom: "50px" }}>
-              <h1 style={{ color: colors.textMain, fontSize: "42px", fontWeight: "900", letterSpacing: "-1px" }}>
+              <div style={{ marginBottom: "15px" }}>
+                <span style={{ background: "#fee2e2", color: "#b91c1c", padding: "4px 12px", borderRadius: "20px", fontSize: "12px", fontWeight: "bold", textTransform: "uppercase", letterSpacing: "0.5px" }}>Demo Mode</span>
+                <span style={{ color: colors.textMuted, fontSize: "12px", marginLeft: "8px" }}>(Not tied to a database)</span>
+              </div>
+              
+              <h1 style={{ color: colors.textMain, fontSize: "48px", fontWeight: "900", letterSpacing: "-1.5px", margin: "0 0 10px 0" }}>
                 SnapMatrix OS
               </h1>
-              {/* Removed name from welcome text */}
-              <p style={{ color: colors.textMuted, fontSize: "18px" }}>AI analytics, advanced reporting, and integrated shipping will be introduced in v3.0.</p>
+              
+              <div style={{ color: colors.accentGreen, fontWeight: "700", fontSize: "16px", marginBottom: "20px" }}>
+                🚀 AI Forecasting, Reporting, and Shipping arriving in v3.0
+              </div>
+
+              <p style={{ color: colors.textMain, fontSize: "18px", lineHeight: "1.6", maxWidth: "800px", marginBottom: "30px", fontWeight: "500" }}>
+                SnapMatrix OS is a lightweight MRP system for small and mid‑sized businesses that manage service work or production jobs. 
+                It replaces scattered spreadsheets and messages with one simple place to track clients, jobs, materials, inventory, and purchasing 
+                — without the complexity of big enterprise software.
+              </p>
             </header>
 
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: "25px" }}>
+              <MenuCard title="Service Scheduling" icon="📅" target="gantt" color={colors.accentViolet} description="Visual Gantt chart for scheduling technicians and managing live job tracks." />
               <MenuCard title="Service Onboarding" icon="🛠️" target="service" color={colors.accentBlue} description="Deploy AI copy-gen and onboarding flows for standard clients." />
               <MenuCard title="Client Ledger" icon="👥" target="ledger" color={colors.accentPurple} description="Manage client onboarding database and synced job records." />
               <MenuCard title="Production Portal" icon="🎬" target="production" color={colors.accentAmber} description="Manage film titles, production houses, and job numbers." />
@@ -129,12 +149,23 @@ export default function App() {
               <MenuCard title="Purchase Orders" icon="📜" target="po" color={colors.accentRose} description="Create and manage vendor POs for incoming gear." />
               <MenuCard title="Inventory Vault" icon="📦" target="inventory" color={colors.accentIndigo} description="Real-time gear tracking and stock level management." />
               <MenuCard title="Receiving Hub" icon="🚚" target="receiving" color={colors.accentGreen} description="Process incoming shipments and update stock levels." />
+              
+              {/* v3.0 COMING SOON CARD */}
+              <MenuCard 
+                title="v3.0 Roadmap" 
+                icon="🚀" 
+                target="home" 
+                color="#94a3b8" 
+                disabled={true}
+                description="Upcoming: AI-powered demand forecasting, automated shipping labels, and advanced financial reporting modules." 
+              />
             </div>
           </div>
         )}
 
         <div style={{ position: "relative" }}>
           <Suspense fallback={<div style={{padding: "20px", color: colors.textMuted}}>Loading Module...</div>}>
+            {view === "gantt" && <ServiceGantt setView={setView} />}
             {view === "service" && <ServiceClientOnboarding setView={setView} />}
             {view === "ledger" && <Dashboard setView={setView} />}
             {view === "production" && <ProductionOnboarding setView={setView} />}
@@ -164,6 +195,7 @@ export default function App() {
         </div>
 
         <DockButton label="Home" icon="🏠" target="home" color={colors.textMain} />
+        <DockButton label="Service Scheduling" icon="📅" target="gantt" color={colors.accentViolet} />
         <DockButton label="Product Master" icon="🏗️" target="mfg" color={colors.accentTeal} />
         <DockButton label="Client Ledger" icon="👥" target="ledger" color={colors.accentPurple} />
         <DockButton label="Services" icon="🛠️" target="service" color={colors.accentBlue} />
@@ -173,7 +205,7 @@ export default function App() {
         <DockButton label="Receiving" icon="🚚" target="receiving" color={colors.accentGreen} />
 
         <div style={{ marginTop: "auto", fontSize: "10px", color: colors.textMuted, textAlign: "center" }}>
-          System v2.5 | Client Sync Active
+          System v2.6 | DEMO MODE ACTIVE
         </div>
       </aside>
     </div>

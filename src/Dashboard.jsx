@@ -1,14 +1,67 @@
 import React, { useEffect, useState } from "react";
-import { db } from "./firebase";
-import { collection, query, orderBy, getDocs, doc, updateDoc } from "firebase/firestore";
+
+// --- MOCK DATA (Matching your Scheduling Calendar) ---
+const DEMO_JOBS = [
+  {
+    id: "c1",
+    customerName: "Quantum Systems",
+    customerCompany: "Quantum Tech Group",
+    customerEmail: "ops@quantumsystems.io",
+    customerPhone: "555-0122",
+    customerAddress: "404 Innovation Way",
+    customerCity: "Tech City",
+    customerState: "CA",
+    customerZip: "94025",
+    jobType: "Network Install",
+    jobPriority: "High",
+    assignedTeam: "Alex Rivera",
+    jobDescription: "Full rack installation and fiber termination.",
+    specialInstructions: "Requires badge access after 5 PM.",
+    notes: "Client is very specific about cable management."
+  },
+  {
+    id: "c2",
+    customerName: "Skyline Realty",
+    customerCompany: "Skyline Property Mgmt",
+    customerEmail: "info@skylinerealty.com",
+    customerPhone: "555-0988",
+    customerAddress: "1200 Horizon Blvd",
+    customerCity: "Cloud City",
+    customerState: "NY",
+    customerZip: "10001",
+    jobType: "Maintenance",
+    jobPriority: "Medium",
+    assignedTeam: "Alex Rivera",
+    jobDescription: "Quarterly security camera audit.",
+    specialInstructions: "Bring a 12ft ladder.",
+    notes: "Last tech noted the DVR is running hot."
+  },
+  {
+    id: "c3",
+    customerName: "Apex Manufacturing",
+    customerCompany: "Apex Industrial",
+    customerEmail: "maintenance@apex.com",
+    customerPhone: "555-4433",
+    customerAddress: "77 Factory Lane",
+    customerCity: "Industrial Park",
+    customerState: "OH",
+    customerZip: "44101",
+    jobType: "Repair",
+    jobPriority: "Urgent",
+    assignedTeam: "Jordan Smith",
+    jobDescription: "Main conveyor sensor failure.",
+    specialInstructions: "Check-in at Gate 4 security.",
+    notes: "Production is down until this is fixed."
+  }
+];
 
 export default function Dashboard() {
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterPriority, setFilterPriority] = useState("All");
+  const [isDemo] = useState(true); // Always true for this version
   
-  // State for the job currently being edited
   const [editingJob, setEditingJob] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -22,59 +75,35 @@ export default function Dashboard() {
     danger: "#e53e3e"
   };
 
-  const fetchJobs = async () => {
+  const fetchJobs = () => {
     setLoading(true);
-    try {
-      const q = query(collection(db, "client_onboarding"), orderBy("createdAt", "desc"));
-      const querySnapshot = await getDocs(q);
-      const jobsData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setJobs(jobsData);
-    } catch (err) { 
-      console.error("Dashboard Fetch Error:", err);
-      
-      // --- DEMO FALLBACK DATA ---
-      // This ensures Ric sees a working UI even without a database connection
-      setJobs([
-        {
-          id: "demo-1",
-          customerName: "John Doe (Demo)",
-          customerCompany: "Example Corp",
-          customerEmail: "john@example.com",
-          customerAddress: "123 Demo St",
-          customerCity: "Simulation City",
-          jobType: "Standard Setup",
-          jobPriority: "High",
-          assignedTeam: "Alpha Team"
-        }
-      ]);
-    } finally { 
-      setLoading(false); 
-    }
+    // Simulating a database fetch delay
+    setTimeout(() => {
+      setJobs(DEMO_JOBS);
+      setLoading(false);
+    }, 800);
   };
 
   useEffect(() => {
     fetchJobs();
   }, []);
 
-  const handleUpdate = async () => {
+  const handleUpdate = () => {
     if (!editingJob) return;
     setIsSaving(true);
-    try {
-      const docRef = doc(db, "client_onboarding", editingJob.id);
-      const { id, ...updateData } = editingJob;
-      await updateDoc(docRef, updateData);
-      await fetchJobs();
-      setEditingJob(null);
-    } catch (err) {
-      alert("Error updating document: " + err.message);
-    } finally {
+    
+    // Simulating the updateDoc process locally
+    setTimeout(() => {
+      setJobs(prev => prev.map(j => j.id === editingJob.id ? editingJob : j));
       setIsSaving(false);
-    }
+      setEditingJob(null);
+      alert("Demo Mode: Record updated in local state!");
+    }, 1000);
   };
 
   const filteredJobs = jobs.filter(job => {
     const matchesPriority = filterPriority === "All" || job.jobPriority === filterPriority;
-    const searchStr = (job.customerName + job.customerAddress + job.customerCompany).toLowerCase();
+    const searchStr = (job.customerName + (job.customerAddress || "") + (job.customerCompany || "")).toLowerCase();
     return matchesPriority && searchStr.includes(searchTerm.toLowerCase());
   });
 
@@ -88,45 +117,33 @@ export default function Dashboard() {
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: "20px" }}>
-          
-          {/* Section 1: Customer Info */}
           <fieldset style={fieldsetStyle}>
             <legend style={legendStyle}>👤 Customer Contact</legend>
             <label style={labelStyle}>Full Name</label>
             <input style={inputStyle} value={editingJob.customerName || ""} onChange={(e) => setEditingJob({...editingJob, customerName: e.target.value})} />
-            
             <label style={labelStyle}>Company</label>
             <input style={inputStyle} value={editingJob.customerCompany || ""} onChange={(e) => setEditingJob({...editingJob, customerCompany: e.target.value})} />
-            
             <label style={labelStyle}>Email</label>
             <input style={inputStyle} value={editingJob.customerEmail || ""} onChange={(e) => setEditingJob({...editingJob, customerEmail: e.target.value})} />
-            
             <label style={labelStyle}>Phone</label>
             <input style={inputStyle} value={editingJob.customerPhone || ""} onChange={(e) => setEditingJob({...editingJob, customerPhone: e.target.value})} />
           </fieldset>
 
-          {/* Section 2: Location */}
           <fieldset style={fieldsetStyle}>
             <legend style={legendStyle}>📍 Location Details</legend>
             <label style={labelStyle}>Street Address</label>
             <input style={inputStyle} value={editingJob.customerAddress || ""} onChange={(e) => setEditingJob({...editingJob, customerAddress: e.target.value})} />
-            
             <div style={{ display: "flex", gap: "10px" }}>
               <div style={{ flex: 2 }}><label style={labelStyle}>City</label><input style={inputStyle} value={editingJob.customerCity || ""} onChange={(e) => setEditingJob({...editingJob, customerCity: e.target.value})} /></div>
               <div style={{ flex: 1 }}><label style={labelStyle}>ST</label><input style={inputStyle} value={editingJob.customerState || ""} onChange={(e) => setEditingJob({...editingJob, customerState: e.target.value})} /></div>
               <div style={{ flex: 1 }}><label style={labelStyle}>Zip</label><input style={inputStyle} value={editingJob.customerZip || ""} onChange={(e) => setEditingJob({...editingJob, customerZip: e.target.value})} /></div>
             </div>
-
-            <label style={labelStyle}>Start/Office Location</label>
-            <input style={inputStyle} value={editingJob.companyLocations || ""} onChange={(e) => setEditingJob({...editingJob, companyLocations: e.target.value})} />
           </fieldset>
 
-          {/* Section 3: Job Schedule & Specs */}
           <fieldset style={fieldsetStyle}>
             <legend style={legendStyle}>📅 Job Specs</legend>
             <label style={labelStyle}>Job Type</label>
             <input style={inputStyle} value={editingJob.jobType || ""} onChange={(e) => setEditingJob({...editingJob, jobType: e.target.value})} />
-            
             <label style={labelStyle}>Priority</label>
             <select style={inputStyle} value={editingJob.jobPriority || "Medium"} onChange={(e) => setEditingJob({...editingJob, jobPriority: e.target.value})}>
               <option value="Low">Low</option>
@@ -134,25 +151,14 @@ export default function Dashboard() {
               <option value="High">High</option>
               <option value="Urgent">Urgent</option>
             </select>
-
-            <div style={{ display: "flex", gap: "10px" }}>
-              <div style={{ flex: 1 }}><label style={labelStyle}>Start Date</label><input type="date" style={inputStyle} value={editingJob.jobStartDate || ""} onChange={(e) => setEditingJob({...editingJob, jobStartDate: e.target.value})} /></div>
-              <div style={{ flex: 1 }}><label style={labelStyle}>Start Time</label><input type="time" style={inputStyle} value={editingJob.jobStartTime || ""} onChange={(e) => setEditingJob({...editingJob, jobStartTime: e.target.value})} /></div>
-            </div>
-
             <label style={labelStyle}>Assigned Team</label>
             <input style={inputStyle} value={editingJob.assignedTeam || ""} onChange={(e) => setEditingJob({...editingJob, assignedTeam: e.target.value})} />
           </fieldset>
 
-          {/* Section 4: Descriptions & Notes */}
           <fieldset style={{ ...fieldsetStyle, gridColumn: "span 1" }}>
             <legend style={legendStyle}>📝 Work Details</legend>
             <label style={labelStyle}>Job Description</label>
             <textarea style={{ ...inputStyle, height: "80px" }} value={editingJob.jobDescription || ""} onChange={(e) => setEditingJob({...editingJob, jobDescription: e.target.value})} />
-            
-            <label style={labelStyle}>Special Instructions</label>
-            <textarea style={{ ...inputStyle, height: "60px", background: "#fffbeb" }} value={editingJob.specialInstructions || ""} onChange={(e) => setEditingJob({...editingJob, specialInstructions: e.target.value})} />
-            
             <label style={labelStyle}>Internal Notes</label>
             <textarea style={{ ...inputStyle, height: "60px" }} value={editingJob.notes || ""} onChange={(e) => setEditingJob({...editingJob, notes: e.target.value})} />
           </fieldset>
@@ -160,7 +166,7 @@ export default function Dashboard() {
 
         <div style={{ marginTop: "30px", display: "flex", gap: "15px" }}>
           <button onClick={handleUpdate} disabled={isSaving} style={{ flex: 2, padding: "16px", background: colors.success, color: "white", border: "none", borderRadius: "10px", fontWeight: "bold", cursor: "pointer" }}>
-            {isSaving ? "Saving..." : "💾 Update Records"}
+            {isSaving ? "Simulating Update..." : "💾 Update Demo Records"}
           </button>
           <button onClick={() => setEditingJob(null)} style={{ flex: 1, padding: "16px", background: "#64748b", color: "white", border: "none", borderRadius: "10px", fontWeight: "bold", cursor: "pointer" }}>
             Discard Changes
@@ -170,13 +176,17 @@ export default function Dashboard() {
     );
   }
 
-  // --- LIST VIEW ---
   return (
     <div style={{ padding: "40px", background: "#f0f2f5", minHeight: "100vh", fontFamily: "sans-serif" }}>
+      
+      {/* DEMO ALERT */}
+      <div style={{ maxWidth: "1000px", margin: "0 auto 20px auto", background: "#fffbeb", border: "1px solid #fde68a", color: "#92400e", padding: "12px", borderRadius: "10px", textAlign: "center", fontWeight: "bold", fontSize: "14px" }}>
+        🚀 DEMO MODE: Showing customers from your Schedule Grid. Changes are session-based only.
+      </div>
+
       <h1 style={{ textAlign: "center", color: colors.primary, marginBottom: "30px" }}>Client Onboarding Dashboard</h1>
 
       <div style={{ maxWidth: "1000px", margin: "0 auto" }}>
-        {/* Filters */}
         <div style={{ background: "white", padding: "20px", borderRadius: "15px", marginBottom: "30px", display: "flex", gap: "20px", boxShadow: "0 4px 6px rgba(0,0,0,0.05)" }}>
           <input style={{ flex: 2, padding: "12px", borderRadius: "8px", border: "1px solid #cbd5e1" }} placeholder="Search name, company, or address..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
           <select style={{ flex: 1, padding: "12px", borderRadius: "8px", border: "1px solid #cbd5e1" }} value={filterPriority} onChange={(e) => setFilterPriority(e.target.value)}>

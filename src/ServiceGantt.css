@@ -1,0 +1,44 @@
+/* ServiceGantt.css */
+@import "tailwindcss"; 
+
+@layer components {
+  .gantt-container {
+    @apply bg-slate-900 rounded-xl border border-slate-700 text-white overflow-hidden shadow-2xl;
+  }
+
+  .gantt-header {
+    @apply p-4 bg-slate-800 border-b border-slate-700 flex gap-3 sticky top-0 z-20;
+  }
+
+  .gantt-input {
+    @apply bg-black border border-slate-600 text-white px-4 py-2 rounded-lg flex-1 focus:ring-2 focus:ring-blue-500 outline-none;
+  }
+
+  .gantt-add-btn {
+    @apply bg-blue-600 hover:bg-blue-500 text-white px-6 py-2 rounded-lg font-bold transition-colors;
+  }
+
+  .gantt-time-ruler {
+    @apply flex bg-slate-800 border-b border-slate-700 sticky top-[73px] z-10;
+  }
+
+  .gantt-tech-col {
+    @apply w-[200px] p-4 border-r border-slate-700 font-bold shrink-0 bg-slate-800;
+  }
+
+  .gantt-hour-cell {
+    @apply flex-1 text-center text-[10px] text-slate-400 py-3 border-r border-slate-800 uppercase tracking-tighter;
+  }
+
+  .gantt-row {
+    @apply flex border-b border-slate-800 min-h-[100px] relative hover:bg-slate-800/50 transition-colors;
+  }
+
+  .gantt-track {
+    @apply flex-1 relative flex bg-slate-900/50;
+  }
+
+  .gantt-job-bar {
+    @apply absolute top-6 h-12 bg-indigo-600 rounded-lg flex items-center px-3 text-xs font-bold shadow-lg border-l-4 border-indigo-400 cursor-pointer hover:brightness-110 z-0;
+  }
+}

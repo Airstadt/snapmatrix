@@ -1,244 +1,286 @@
-import React, { useState } from "react";
-import { db } from "./firebase"; 
-import { collection, query, where, getDocs, limit, addDoc, serverTimestamp } from "firebase/firestore";
+import React, { useState, useEffect } from 'react';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable'; 
 
-export default function ManufacturedProductRecord({ setView }) {
-  // --- DEMO DATA SEED ---
-  const demoComponents = [
-    { id: "mock-1", partName: "Aluminum Frame 20mm", sku: "AL-20", cost: 15.50, isSubAssembly: false },
-    { id: "mock-2", partName: "Power Control Board", sku: "PCB-V4", cost: 42.00, isSubAssembly: false },
-    { id: "mock-3", partName: "Lens Housing Assy", sku: "ASSY-LENS", cost: 125.00, isSubAssembly: true }
-  ];
+// --- MOCK DATABASE FOR DEMO MODE ---
+// Populated with all fields to demonstrate the "Clicked" state
+const DEMO_PURCHASE_ORDERS = {
+  "PO-2026-001": {
+    poNumber: "PO-2026-001",
+    poDate: "2026-03-01",
+    vendorName: "Industrial Bearings Co.",
+    vendorContact: "123 Industrial Way, Ohio\nSales: (555) 900-1234",
+    buyerName: "SnapCopy AI Solutions",
+    buyerContact: "ops@snapcopyai.com",
+    buyerContactPerson: "Ric Manager",
+    paymentTerms: "Net 30",
+    deliveryTerms: "FOB Destination",
+    currency: "USD",
+    shipTo: "Main Warehouse Dock 4\n456 Logistics Lane, NY 10001",
+    billTo: "Finance Dept\n789 Corporate Plaza, NY 10001",
+    expectedDelivery: "2026-03-25",
+    shippingMethod: "LTL Freight",
+    deliveryInstructions: "Gate code 1234. High-side dock only.",
+    specialInstructions: "Rush order for production line maintenance. Please confirm receipt.",
+    shippingCost: 150.00,
+    discount: 50.00,
+    items: [
+      { sku: 'WIDGET-01', description: 'High-Performance Bearing', qty: 50, uom: 'ea', unitPrice: 12.50, total: 625.00, taxCategory: 'Standard', notes: 'Stainless steel grade' }
+    ]
+  }
+};
 
-  // --- STATE MANAGEMENT ---
-  const [productName, setProductName] = useState("Cinema Rig V2");
-  const [sku, setSku] = useState("CR-002");
-  const [laborCost, setLaborCost] = useState(45);
-  const [bomItems, setBomItems] = useState([]); 
-  
-  const [searchTerm, setSearchTerm] = useState("");
-  const [searchResults, setSearchResults] = useState(demoComponents);
-  const [showDropdown, setShowDropdown] = useState(false); 
-  const [isSearching, setIsSearching] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
+const POModule = ({ setView, selectedPoNum }) => {
+  const [loading, setLoading] = useState(false);
+  const [searchId, setSearchId] = useState(""); 
 
-  // --- STYLING ---
   const colors = {
-    cardBg: "#ffffff",
-    textMain: "#0f172a",
-    textMuted: "#64748b",
-    accentTeal: "#0d9488",
-    accentIndigo: "#1e40af", 
-    border: "#f1f5f9",
-    inputBg: "#f8fafc"
+    primary: "#d97706",
+    secondary: "#b45309",
+    lightGray: "#e2e8f0",
+    textDark: "#1a202c",
+    errorRed: "#e53e3e",
+    successGreen: "#38a169",
+    sectionBg: "#f8fafc",
+    darkBlueBg: "#1e293b" 
   };
 
-  const inputStyle = {
-    width: "100%", padding: "12px", borderRadius: "8px", border: `1px solid ${colors.border}`,
-    background: colors.inputBg, fontSize: "14px", outline: "none"
-  };
+  const [poData, setPoData] = useState({
+    poNumber: `PO-${Math.floor(1000 + Math.random() * 9000)}`,
+    poDate: new Date().toISOString().split('T')[0],
+    vendorName: '',
+    vendorContact: '',
+    buyerName: 'SnapCopy AI Solutions',
+    buyerContact: '',
+    buyerContactPerson: '',
+    paymentTerms: 'Net 30',
+    deliveryTerms: 'FOB Destination',
+    currency: 'USD',
+    shipTo: '',
+    billTo: '',
+    expectedDelivery: '',
+    shippingMethod: 'UPS Ground',
+    deliveryInstructions: '',
+    specialInstructions: '', 
+    shippingCost: 0,
+    discount: 0 
+  });
 
-  // --- LOGIC: SEARCH ---
-  const searchInventory = async (term) => {
-    setSearchTerm(term);
-    setShowDropdown(true); 
+  const [items, setItems] = useState([
+    { sku: '', description: '', qty: 1, uom: 'ea', unitPrice: 0, total: 0, taxCategory: 'Standard', notes: '' }
+  ]);
+
+  // --- RESTORED: SEARCH LOGIC (DEMO VERSION) ---
+  const handleSearch = () => {
+    const term = searchId.trim() || selectedPoNum;
+    if (!term) return alert("Please enter a PO Number");
     
-    if (term.length < 1) { 
-      setSearchResults(demoComponents); 
-      return; 
-    }
-
-    setIsSearching(true);
-    try {
-      const results = [];
-      const searchPrefix = term.toUpperCase();
-      const searchEnd = searchPrefix + "\uf8ff";
-
-      const invQ = query(collection(db, "inventory"), where("sku", ">=", searchPrefix), where("sku", "<=", searchEnd), limit(5));
-      const prodQ = query(collection(db, "products"), where("sku", ">=", searchPrefix), where("sku", "<=", searchEnd), limit(3));
-
-      const [invSnap, prodSnap] = await Promise.all([getDocs(invQ), getDocs(prodQ)]);
-
-      invSnap.forEach((doc) => results.push({ id: doc.id, partName: doc.data().description || "Unnamed Part", sku: doc.data().sku, cost: doc.data().unit_cost || 0, isSubAssembly: false }));
-      prodSnap.forEach((doc) => results.push({ id: doc.id, partName: doc.data().productName || "Unnamed Assy", sku: doc.data().sku, cost: doc.data().finalUnitCost || 0, isSubAssembly: true }));
-
-      if (results.length === 0) {
-        setSearchResults(demoComponents.filter(p => p.sku.includes(searchPrefix) || p.partName.toUpperCase().includes(searchPrefix)));
+    setLoading(true);
+    setTimeout(() => {
+      const found = DEMO_PURCHASE_ORDERS[term];
+      if (found) {
+        setPoData(found);
+        setItems(found.items || []);
       } else {
-        setSearchResults(results);
+        alert("Demo Record not found. Try searching: PO-2026-001");
       }
-    } catch (error) {
-      setSearchResults(demoComponents.filter(p => p.sku.includes(term.toUpperCase())));
-    } finally {
-      setIsSearching(false);
-    }
+      setLoading(false);
+    }, 400);
   };
 
-  const addPartToBOM = (part) => {
-    if (bomItems.find(item => item.sku === part.sku)) {
-      alert("This part is already in the BOM.");
-      return;
+  // Auto-trigger when clicking from Inventory
+  useEffect(() => {
+    if (selectedPoNum) {
+      setSearchId(selectedPoNum);
+      const found = DEMO_PURCHASE_ORDERS[selectedPoNum];
+      if (found) {
+        setPoData(found);
+        setItems(found.items || []);
+      }
     }
-    setBomItems([...bomItems, { id: part.id, partName: part.partName, sku: part.sku, qty: 1, unitCost: part.cost, isSubAssembly: part.isSubAssembly }]);
-    setSearchTerm(""); 
-    setShowDropdown(false); 
+  }, [selectedPoNum]);
+
+  const subtotal = items.reduce((acc, item) => acc + (Number(item.qty) * Number(item.unitPrice)), 0);
+  const tax = subtotal * 0.08; 
+  const grandTotal = subtotal + tax + Number(poData.shippingCost) - Number(poData.discount);
+
+  const getInputStyle = (isFocused) => ({
+    width: "100%",
+    padding: "10px",
+    marginTop: "4px",
+    borderRadius: "6px",
+    border: `1px solid ${isFocused ? colors.primary : colors.lightGray}`,
+    fontSize: "14px",
+    outline: "none",
+    boxSizing: "border-box",
+  });
+
+  const handleAddItem = () => {
+    setItems([...items, { sku: '', description: '', qty: 1, uom: 'ea', unitPrice: 0, total: 0, taxCategory: 'Standard', notes: '' }]);
   };
 
-  const removePart = (id) => setBomItems(bomItems.filter(item => item.id !== id));
-
-  const handleSaveProduct = async () => {
-    if (!productName || !sku || bomItems.length === 0) {
-      alert("Please provide a Product Name, SKU, and at least one BOM item.");
-      return;
-    }
-    setIsSaving(true);
-    try {
-      await addDoc(collection(db, "products"), { productName, sku: sku.toUpperCase(), laborCost: Number(laborCost), totalPartsCost: totalBOMCost, finalUnitCost: finalProductCost, bom: bomItems, createdAt: serverTimestamp() });
-      alert("✅ Master Product & BOM Saved Successfully!");
-    } catch (error) {
-      alert("✅ [DEMO MODE] Master Product & BOM Saved!");
-    } finally {
-      setIsSaving(false);
-    }
+  const removeItem = (index) => {
+    if (items.length > 1) setItems(items.filter((_, i) => i !== index));
   };
 
-  const totalBOMCost = bomItems.reduce((acc, item) => acc + (Number(item.qty) * Number(item.unitCost)), 0);
-  const finalProductCost = totalBOMCost + Number(laborCost);
+  const updateItem = (index, field, value) => {
+    const newItems = [...items];
+    newItems[index][field] = value;
+    if (field === 'qty' || field === 'unitPrice') {
+      newItems[index].total = Number(newItems[index].qty || 0) * Number(newItems[index].unitPrice || 0);
+    }
+    setItems(newItems);
+  };
+
+  const generatePDF = () => {
+    const doc = new jsPDF();
+    const primaryColor = [217, 119, 6]; 
+    const secondaryColor = [71, 85, 105]; 
+
+    doc.setFontSize(22);
+    doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+    doc.text("PURCHASE ORDER", 20, 20);
+
+    doc.setFontSize(10);
+    doc.setTextColor(secondaryColor[0], secondaryColor[1], secondaryColor[2]);
+    doc.text(`PO Number: ${poData.poNumber}`, 140, 15);
+    doc.text(`PO Date: ${poData.poDate}`, 140, 20);
+
+    autoTable(doc, {
+      startY: 125,
+      head: [['SKU', 'Description', 'Qty', 'UOM', 'Unit Price', 'Total']],
+      body: items.map(i => [i.sku, i.description, i.qty, i.uom, `$${Number(i.unitPrice).toFixed(2)}`, `$${Number(i.total).toFixed(2)}`]),
+      headStyles: { fillColor: primaryColor }
+    });
+
+    doc.save(`${poData.poNumber}_DEMO.pdf`);
+  };
+
+  const handleSubmit = () => {
+    setLoading(true);
+    setTimeout(() => {
+      generatePDF();
+      alert("PO Logged (Demo Mode) & PDF Generated!");
+      setLoading(false);
+      if(setView) setView("home");
+    }, 800);
+  };
 
   return (
-    <div style={{ maxWidth: "900px", margin: "0 auto", padding: "20px", fontFamily: "sans-serif" }}>
-      <header style={{ marginBottom: "30px" }}>
-        <h1 style={{ color: colors.textMain, fontSize: "32px", fontWeight: "900", margin: 0 }}>Master Product Record</h1>
-        <p style={{ color: colors.textMuted, margin: "5px 0 0 0" }}>Define manufactured goods and BOM requirements.</p>
-      </header>
-
-      {/* 1. PRODUCT DETAILS */}
-      <div style={{ background: colors.cardBg, padding: "30px", borderRadius: "16px", boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)", marginBottom: "25px" }}>
-        <h2 style={{ fontSize: "18px", marginBottom: "20px", color: colors.textMain }}>General Information</h2>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px" }}>
-          <div>
-            <label style={{ display: "block", fontSize: "11px", fontWeight: "700", color: colors.textMuted, marginBottom: "8px", textTransform: "uppercase" }}>Product Name</label>
-            <input style={inputStyle} value={productName} onChange={(e) => setProductName(e.target.value)} />
-          </div>
-          <div>
-            <label style={{ display: "block", fontSize: "11px", fontWeight: "700", color: colors.textMuted, marginBottom: "8px", textTransform: "uppercase" }}>SKU / Model</label>
-            <input style={inputStyle} value={sku} onChange={(e) => setSku(e.target.value)} />
-          </div>
+    <div style={{ maxWidth: "1200px", margin: "20px auto", fontFamily: "sans-serif", color: colors.textDark }}>
+      
+      {/* SEARCH HEADER */}
+      <div style={{ background: colors.darkBlueBg, padding: "20px 30px", borderRadius: "12px", marginBottom: "20px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div style={{ flex: 1 }}>
+          <label style={{ color: "#94a3b8", fontSize: "11px", fontWeight: "bold", display: "block", marginBottom: "8px" }}>QUICK SEARCH BY PO #</label>
+          <input 
+            type="text" 
+            placeholder="Enter PO Number..." 
+            value={searchId}
+            onChange={(e) => setSearchId(e.target.value)}
+            onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
+            style={{ background: "transparent", border: "none", borderBottom: "1px solid #334155", color: "white", width: "100%", maxWidth: "600px", padding: "5px 0", outline: "none", fontSize: "16px" }} 
+          />
+        </div>
+        <div style={{ display: "flex", gap: "10px" }}>
+          <button onClick={handleSearch} style={{ background: "#334155", color: "white", border: "1px solid #475569", padding: "10px 25px", borderRadius: "8px", fontWeight: "bold", cursor: "pointer" }}>Find PO</button>
         </div>
       </div>
 
-      {/* 2. BOM SECTION */}
-      <div style={{ background: colors.cardBg, padding: "30px", borderRadius: "16px", boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)", minHeight: "400px" }}>
-        <h2 style={{ fontSize: "18px", color: colors.textMain, marginBottom: "20px" }}>Bill of Materials (BOM)</h2>
+      <div style={{ background: "white", padding: "40px", borderRadius: "12px", boxShadow: "0 10px 25px rgba(0,0,0,0.1)" }}>
+        
+        {/* HEADER SECTION */}
+        <div style={{ display: "flex", justifyContent: "space-between", borderBottom: `3px solid ${colors.primary}`, paddingBottom: "20px", marginBottom: "30px" }}>
+          <div>
+            <h1 style={{ margin: 0, color: colors.primary }}>PURCHASE ORDER</h1>
+            <p style={{margin: "5px 0 0 0", fontSize: "14px", color: "#64748b"}}>Procurement Management System</p>
+          </div>
+          <div style={{ display: "flex", gap: "15px" }}>
+            <div><label style={{fontSize: "11px", fontWeight: "bold"}}>PO NUMBER</label><input style={getInputStyle()} value={poData.poNumber} onChange={e => setPoData({...poData, poNumber: e.target.value})} /></div>
+            <div><label style={{fontSize: "11px", fontWeight: "bold"}}>PO DATE</label><input type="date" style={getInputStyle()} value={poData.poDate} onChange={e => setPoData({...poData, poDate: e.target.value})} /></div>
+            <div><label style={{fontSize: "11px", fontWeight: "bold"}}>CURRENCY</label><input style={getInputStyle()} value={poData.currency} onChange={e => setPoData({...poData, currency: e.target.value})} /></div>
+          </div>
+        </div>
 
-        <div style={{ marginBottom: "40px", position: "relative" }}>
-          <label style={{ display: "block", fontSize: "11px", fontWeight: "700", color: colors.textMuted, marginBottom: "8px", textTransform: "uppercase" }}>
-            Add Component
-          </label>
-          <input 
-            style={inputStyle} 
-            placeholder="Search SKU..." 
-            value={searchTerm}
-            onFocus={() => setShowDropdown(true)}
-            onChange={(e) => searchInventory(e.target.value)}
-          />
-          
-          {showDropdown && searchResults.length > 0 && (
-            <div style={{ 
-              position: "absolute", top: "100%", left: 0, right: 0, 
-              background: "white", border: `1px solid ${colors.border}`, 
-              borderRadius: "8px", marginTop: "5px", 
-              boxShadow: "0 10px 25px rgba(0,0,0,0.15)", zIndex: 9999,
-              maxHeight: "250px", overflowY: "auto"
-            }}>
-              {searchResults.map(result => (
-                <div 
-                  key={result.id}
-                  onClick={() => addPartToBOM(result)}
-                  style={{ padding: "12px", cursor: "pointer", borderBottom: `1px solid ${colors.border}`, display: "flex", justifyContent: "space-between" }}
-                  onMouseEnter={(e) => e.currentTarget.style.background = colors.inputBg}
-                  onMouseLeave={(e) => e.currentTarget.style.background = "none"}
-                >
-                  <div>
-                    <div style={{ fontWeight: "700", color: colors.textMain, fontSize: "14px" }}>{result.partName}</div>
-                    <div style={{ fontSize: "12px", color: colors.textMuted }}>{result.sku}</div>
-                  </div>
-                  <div style={{ textAlign: "right" }}>
-                    <span style={{ fontWeight: "bold", color: colors.accentTeal }}>${result.cost.toFixed(2)}</span>
-                  </div>
-                </div>
-              ))}
-              <div 
-                onClick={() => setShowDropdown(false)} 
-                style={{ padding: "8px", textAlign: "center", fontSize: "11px", color: colors.accentIndigo, cursor: "pointer", background: colors.inputBg }}
-              >
-                Close Suggestions
+        {/* VENDOR & BUYER SECTION */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "40px", marginBottom: "30px" }}>
+          <div>
+            <h4 style={{ color: colors.secondary, borderBottom: "1px solid #eee" }}>Vendor / Supplier</h4>
+            <input style={getInputStyle()} placeholder="Supplier Name" value={poData.vendorName} onChange={e => setPoData({...poData, vendorName: e.target.value})} />
+            <textarea style={{...getInputStyle(), height: "70px", marginTop: "10px"}} placeholder="Contact Info" value={poData.vendorContact} onChange={e => setPoData({...poData, vendorContact: e.target.value})} />
+            <div style={{display: "flex", gap: "10px", marginTop: "10px"}}>
+                <input style={getInputStyle()} placeholder="Payment Terms" value={poData.paymentTerms} onChange={e => setPoData({...poData, paymentTerms: e.target.value})} />
+                <input style={getInputStyle()} placeholder="Delivery Terms" value={poData.deliveryTerms} onChange={e => setPoData({...poData, deliveryTerms: e.target.value})} />
+            </div>
+          </div>
+          <div>
+            <h4 style={{ color: colors.secondary, borderBottom: "1px solid #eee" }}>Buyer / Company</h4>
+            <input style={getInputStyle()} value={poData.buyerName} onChange={e => setPoData({...poData, buyerName: e.target.value})} />
+            <input style={{...getInputStyle(), marginTop: "10px"}} placeholder="Contact Person" value={poData.buyerContactPerson} onChange={e => setPoData({...poData, buyerContactPerson: e.target.value})} />
+            <input style={{...getInputStyle(), marginTop: "10px"}} placeholder="Buyer Email/Phone" value={poData.buyerContact} onChange={e => setPoData({...poData, buyerContact: e.target.value})} />
+          </div>
+        </div>
+
+        {/* SHIPPING & BILLING ADDRESSES */}
+        <div style={{ background: colors.sectionBg, padding: "20px", borderRadius: "8px", marginBottom: "30px", display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "20px" }}>
+          <div><label style={{fontSize: "11px", fontWeight: "bold"}}>📍 SHIP TO ADDRESS</label><textarea style={{...getInputStyle(), height: "80px"}} value={poData.shipTo} onChange={e => setPoData({...poData, shipTo: e.target.value})} /></div>
+          <div><label style={{fontSize: "11px", fontWeight: "bold"}}>💳 BILL TO ADDRESS</label><textarea style={{...getInputStyle(), height: "80px"}} value={poData.billTo} onChange={e => setPoData({...poData, billTo: e.target.value})} /></div>
+          <div>
+            <label style={{fontSize: "11px", fontWeight: "bold"}}>SHIPPING METHOD</label>
+            <select style={getInputStyle()} value={poData.shippingMethod} onChange={e => setPoData({...poData, shippingMethod: e.target.value})}>
+                <option value="UPS Ground">UPS Ground</option>
+                <option value="UPS Next Day Air">UPS Next Day Air</option>
+                <option value="FedEx Ground">FedEx Ground</option>
+                <option value="LTL Freight">LTL Freight</option>
+                <option value="Will Call / Pickup">Will Call / Pickup</option>
+            </select>
+            <label style={{fontSize: "11px", fontWeight: "bold", marginTop: "10px", display: "block"}}>EXP. DELIVERY</label>
+            <input type="date" style={getInputStyle()} value={poData.expectedDelivery} onChange={e => setPoData({...poData, expectedDelivery: e.target.value})} />
+            <input style={{...getInputStyle(), marginTop: "8px"}} placeholder="Gate code/Dock #" value={poData.deliveryInstructions} onChange={e => setPoData({...poData, deliveryInstructions: e.target.value})} />
+          </div>
+        </div>
+
+        {/* LINE ITEMS TABLE */}
+        <div style={{ marginBottom: "30px" }}>
+          <div style={{ display: "flex", gap: "8px", fontWeight: "bold", padding: "12px", background: "#f1f5f9", borderRadius: "5px", fontSize: "11px", marginBottom: "10px" }}>
+            <div style={{ flex: 1.5 }}>SKU / ITEM #</div><div style={{ flex: 2.5 }}>DESCRIPTION</div><div style={{ flex: 1 }}>QTY</div><div style={{ flex: 1 }}>UOM</div><div style={{ flex: 1 }}>TAX CAT</div><div style={{ flex: 1.2 }}>UNIT PRICE</div><div style={{ flex: 1, textAlign: "right" }}>TOTAL</div><div style={{ width: "30px" }}></div>
+          </div>
+          {items.map((item, index) => (
+            <div key={index} style={{ marginBottom: "15px", borderBottom: "1px solid #f1f5f9", paddingBottom: "10px" }}>
+              <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                <input style={{...getInputStyle(), flex: 1.5}} value={item.sku} onChange={e => updateItem(index, 'sku', e.target.value)} />
+                <input style={{...getInputStyle(), flex: 2.5}} value={item.description} onChange={e => updateItem(index, 'description', e.target.value)} />
+                <input type="number" style={{...getInputStyle(), flex: 1}} value={item.qty} onChange={e => updateItem(index, 'qty', e.target.value)} />
+                <input style={{...getInputStyle(), flex: 1}} value={item.uom} onChange={e => updateItem(index, 'uom', e.target.value)} />
+                <input style={{...getInputStyle(), flex: 1}} value={item.taxCategory} onChange={e => updateItem(index, 'taxCategory', e.target.value)} />
+                <input type="number" style={{...getInputStyle(), flex: 1.2}} value={item.unitPrice} onChange={e => updateItem(index, 'unitPrice', e.target.value)} />
+                <div style={{ flex: 1, textAlign: "right", fontWeight: "bold" }}>${Number(item.total).toFixed(2)}</div>
+                <button onClick={() => removeItem(index)} style={{ border: "none", background: "none", color: colors.errorRed, cursor: "pointer", fontSize: "20px" }}>×</button>
               </div>
+              <input style={{...getInputStyle(), width: "40%", height: "30px", fontSize: "12px"}} placeholder="Item specific notes (optional)" value={item.notes} onChange={e => updateItem(index, 'notes', e.target.value)} />
             </div>
-          )}
+          ))}
+          <button onClick={handleAddItem} style={{ marginTop: "10px", padding: "10px 20px", border: `2px dashed ${colors.primary}`, background: "none", color: colors.primary, borderRadius: "6px", cursor: "pointer", fontWeight: "bold" }}>+ Add New Line Item</button>
         </div>
 
-        <div style={{ position: "relative", zIndex: 1 }}>
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead>
-              <tr style={{ textAlign: "left", borderBottom: `2px solid ${colors.border}` }}>
-                <th style={{ padding: "12px", fontSize: "11px", color: colors.textMuted, textTransform: "uppercase" }}>Component</th>
-                <th style={{ padding: "12px", fontSize: "11px", color: colors.textMuted, textTransform: "uppercase", textAlign: "center" }}>Qty</th>
-                <th style={{ padding: "12px", fontSize: "11px", color: colors.textMuted, textTransform: "uppercase", textAlign: "right" }}>Total Cost</th>
-                <th style={{ width: "40px" }}></th>
-              </tr>
-            </thead>
-            <tbody>
-              {bomItems.map(item => (
-                <tr key={item.id} style={{ borderBottom: `1px solid ${colors.border}` }}>
-                  <td style={{ padding: "12px" }}>
-                    <div style={{ fontWeight: "600", color: colors.textMain, fontSize: "14px" }}>{item.partName}</div>
-                    <div style={{ fontSize: "11px", color: colors.textMuted }}>{item.sku}</div>
-                  </td>
-                  <td style={{ padding: "12px", textAlign: "center" }}>
-                    <input 
-                      type="number" 
-                      value={item.qty} 
-                      onChange={(e) => setBomItems(bomItems.map(b => b.id === item.id ? {...b, qty: e.target.value} : b))}
-                      style={{ width: "50px", textAlign: "center", border: "1px solid #ddd", borderRadius: "4px", padding: "4px" }}
-                    />
-                  </td>
-                  <td style={{ padding: "12px", textAlign: "right", fontWeight: "700", color: colors.textMain }}>
-                    ${(Number(item.qty) * Number(item.unitCost)).toFixed(2)}
-                  </td>
-                  <td style={{ textAlign: "center" }}>
-                    <button onClick={() => removePart(item.id)} style={{ color: "#e11d48", border: "none", background: "none", cursor: "pointer" }}>✕</button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-
-          {bomItems.length === 0 && (
-            <div style={{ textAlign: "center", padding: "60px 0", color: colors.textMuted }}>
-              No components added yet. Use the search bar above.
-            </div>
-          )}
-        </div>
-
-        <div style={{ marginTop: "30px", padding: "20px", background: colors.inputBg, borderRadius: "12px", display: "flex", flexDirection: "column", gap: "10px", alignItems: "flex-end" }}>
-          <div style={{ fontSize: "14px", color: colors.textMuted }}>Total Parts Cost: <b>${totalBOMCost.toFixed(2)}</b></div>
-          <div style={{ fontSize: "14px", color: colors.textMuted }}>
-            Labor Cost: <input type="number" style={{ width: "80px", marginLeft: "10px", padding: "5px" }} value={laborCost} onChange={(e) => setLaborCost(e.target.value)} />
+        {/* TOTALS & FOOTER */}
+        <div style={{ display: "grid", gridTemplateColumns: "1.5fr 1fr", gap: "50px", borderTop: `2px solid ${colors.lightGray}`, paddingTop: "30px" }}>
+          <div>
+            <label style={{fontSize: "12px", fontWeight: "bold"}}>📝 ADDITIONAL TERMS & SPECIAL INSTRUCTIONS</label>
+            <textarea style={{...getInputStyle(), height: "100px", marginTop: "10px"}} value={poData.specialInstructions} onChange={e => setPoData({...poData, specialInstructions: e.target.value})} />
           </div>
-          <div style={{ fontSize: "22px", fontWeight: "900", color: colors.accentTeal, marginTop: "10px", borderTop: `2px solid ${colors.border}`, paddingTop: "10px" }}>
-            Unit Cost: ${finalProductCost.toFixed(2)}
+          <div style={{ background: colors.sectionBg, padding: "25px", borderRadius: "12px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "10px" }}><span>Subtotal:</span><span>${subtotal.toFixed(2)}</span></div>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "10px", alignItems: "center" }}><span>Discounts:</span><input type="number" style={{...getInputStyle(), width: "90px", marginTop: 0}} value={poData.discount} onChange={e => setPoData({...poData, discount: e.target.value})} /></div>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "10px" }}><span>Tax (8%):</span><span>${tax.toFixed(2)}</span></div>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "10px", alignItems: "center" }}><span>Shipping:</span><input type="number" style={{...getInputStyle(), width: "90px", marginTop: 0}} value={poData.shippingCost} onChange={e => setPoData({...poData, shippingCost: e.target.value})} /></div>
+            <div style={{ display: "flex", justifyContent: "space-between", marginTop: "20px", fontWeight: "bold", fontSize: "22px", borderTop: `3px solid ${colors.primary}`, paddingTop: "15px" }}><span>Total:</span><span style={{ color: colors.primary }}>${grandTotal.toFixed(2)}</span></div>
+            <button onClick={handleSubmit} disabled={loading} style={{ width: "100%", marginTop: "25px", padding: "18px", background: colors.primary, color: "white", border: "none", borderRadius: "8px", fontWeight: "bold", cursor: "pointer", fontSize: "16px" }}>{loading ? "Processing..." : "Submit & Generate PDF 🧾"}</button>
           </div>
         </div>
-
-        <button 
-          onClick={handleSaveProduct}
-          disabled={isSaving}
-          style={{ width: "100%", marginTop: "25px", padding: "15px", borderRadius: "12px", background: colors.accentTeal, color: "white", border: "none", fontWeight: "800", fontSize: "16px", cursor: "pointer" }}
-        >
-          {isSaving ? "Saving..." : "Save Master Product"}
-        </button>
       </div>
     </div>
   );
-}
+};
+
+export default POModule;

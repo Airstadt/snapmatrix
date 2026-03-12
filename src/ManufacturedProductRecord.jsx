@@ -1,243 +1,227 @@
 import React, { useState } from "react";
-import { db } from "./firebase"; 
-import { collection, query, where, getDocs, limit, addDoc, serverTimestamp } from "firebase/firestore";
+
+// --- MOCK DATA FOR DEMO MODE ---
+const MOCK_INVENTORY = [
+  { sku: "RM-100", name: "Steel Bracket", unit: "pcs", isSubAssembly: false, source: "Inventory" },
+  { sku: "RM-101", name: "M6 Hex Bolt", unit: "pcs", isSubAssembly: false, source: "Inventory" },
+  { sku: "RM-202", name: "Industrial Adhesive", unit: "kg", isSubAssembly: false, source: "Inventory" },
+  { sku: "RM-305", name: "Aluminum Housing", unit: "pcs", isSubAssembly: false, source: "Inventory" },
+];
+
+const MOCK_PRODUCTS = [
+  { sku: "SA-500", name: "Control Board Alpha", unit: "pcs", isSubAssembly: true, source: "Products" },
+  { sku: "SA-900", name: "Wiring Loom V2", unit: "pcs", isSubAssembly: true, source: "Products" },
+];
 
 export default function ManufacturedProductRecord({ setView }) {
-  // --- DEMO DATA SEED ---
-  const demoComponents = [
-    { id: "mock-1", partName: "Aluminum Frame 20mm", sku: "AL-20", cost: 15.50, isSubAssembly: false },
-    { id: "mock-2", partName: "Power Control Board", sku: "PCB-V4", cost: 42.00, isSubAssembly: false },
-    { id: "mock-3", partName: "Lens Housing Assy", sku: "ASSY-LENS", cost: 125.00, isSubAssembly: true }
-  ];
+  // --- STATE: CORE METADATA ---
+  const [productData, setProductData] = useState({
+    name: "Standard Hub Assembly",
+    sku: "PRD-2024-001",
+    type: "manufactured",
+    category: "Mechanical Systems",
+    unit: "pcs",
+    status: "active",
+    default_supplier: "Global Fab Corp",
+    lead_time_days: 14,
+    costing_method: "standard",
+    bom_enabled: true
+  });
 
-  // --- STATE MANAGEMENT ---
-  const [productName, setProductName] = useState("Cinema Rig V2");
-  const [sku, setSku] = useState("CR-002");
-  const [laborCost, setLaborCost] = useState(45);
-  const [bomItems, setBomItems] = useState([]); 
-  
+  const [bomItems, setBomItems] = useState([
+    { component_sku: "RM-100", name: "Steel Bracket", quantity_required: 2, unit: "pcs", sub_assembly: false, notes: "Grade A" }
+  ]);
   const [searchTerm, setSearchTerm] = useState("");
-  const [searchResults, setSearchResults] = useState(demoComponents);
-  const [showDropdown, setShowDropdown] = useState(false); 
-  const [isSearching, setIsSearching] = useState(false);
+  const [searchResults, setSearchResults] = useState([]);
   const [isSaving, setIsSaving] = useState(false);
 
-  // --- STYLING ---
   const colors = {
-    cardBg: "#ffffff",
-    textMain: "#0f172a",
-    textMuted: "#64748b",
-    accentTeal: "#0d9488",
-    accentIndigo: "#1e40af", 
-    border: "#f1f5f9",
-    inputBg: "#f8fafc"
+    primary: "#0d9488",
+    indigo: "#4f46e5",
+    border: "#e2e8f0",
+    bg: "#f8fafc",
+    text: "#1e293b"
   };
 
-  const inputStyle = {
-    width: "100%", padding: "12px", borderRadius: "8px", border: `1px solid ${colors.border}`,
-    background: colors.inputBg, fontSize: "14px", outline: "none"
-  };
-
-  // --- LOGIC: SEARCH ---
-  const searchInventory = async (term) => {
+  // --- LOGIC: SIMULATED SEARCH ---
+  const searchParts = (term) => {
     setSearchTerm(term);
-    setShowDropdown(true); 
+    if (term.length < 2) { setSearchResults([]); return; }
     
-    if (term.length < 1) { 
-      setSearchResults(demoComponents); 
-      return; 
-    }
+    // Simulate searching both Inventory and Products locally
+    const allOptions = [...MOCK_INVENTORY, ...MOCK_PRODUCTS];
+    const results = allOptions.filter(item => 
+      item.sku.toLowerCase().includes(term.toLowerCase()) || 
+      item.name.toLowerCase().includes(term.toLowerCase())
+    ).slice(0, 5);
 
-    setIsSearching(true);
-    try {
-      const results = [];
-      const searchPrefix = term.toUpperCase();
-      const searchEnd = searchPrefix + "\uf8ff";
-
-      const invQ = query(collection(db, "inventory"), where("sku", ">=", searchPrefix), where("sku", "<=", searchEnd), limit(5));
-      const prodQ = query(collection(db, "products"), where("sku", ">=", searchPrefix), where("sku", "<=", searchEnd), limit(3));
-
-      const [invSnap, prodSnap] = await Promise.all([getDocs(invQ), getDocs(prodQ)]);
-
-      invSnap.forEach((doc) => results.push({ id: doc.id, partName: doc.data().description || "Unnamed Part", sku: doc.data().sku, cost: doc.data().unit_cost || 0, isSubAssembly: false }));
-      prodSnap.forEach((doc) => results.push({ id: doc.id, partName: doc.data().productName || "Unnamed Assy", sku: doc.data().sku, cost: doc.data().finalUnitCost || 0, isSubAssembly: true }));
-
-      if (results.length === 0) {
-        setSearchResults(demoComponents.filter(p => p.sku.includes(searchPrefix) || p.partName.toUpperCase().includes(searchPrefix)));
-      } else {
-        setSearchResults(results);
-      }
-    } catch (error) {
-      setSearchResults(demoComponents.filter(p => p.sku.includes(term.toUpperCase())));
-    } finally {
-      setIsSearching(false);
-    }
+    setSearchResults(results);
   };
 
   const addPartToBOM = (part) => {
-    if (bomItems.find(item => item.sku === part.sku)) {
-      alert("This part is already in the BOM.");
-      return;
-    }
-    setBomItems([...bomItems, { id: part.id, partName: part.partName, sku: part.sku, qty: 1, unitCost: part.cost, isSubAssembly: part.isSubAssembly }]);
-    setSearchTerm(""); 
-    setShowDropdown(false); 
+    if (bomItems.find(item => item.component_sku === part.sku)) return;
+    setBomItems([...bomItems, {
+      component_sku: part.sku,
+      name: part.name,
+      quantity_required: 1,
+      unit: part.unit || "pcs",
+      supplier_sku: part.supplier_sku || "",
+      sub_assembly: part.isSubAssembly,
+      notes: ""
+    }]);
+    setSearchTerm("");
+    setSearchResults([]);
   };
 
-  const removePart = (id) => setBomItems(bomItems.filter(item => item.id !== id));
-
-  const handleSaveProduct = async () => {
-    if (!productName || !sku || bomItems.length === 0) {
-      alert("Please provide a Product Name, SKU, and at least one BOM item.");
-      return;
-    }
+  // --- LOGIC: SIMULATED SAVE ---
+  const handleSave = async () => {
+    if (!productData.sku || !productData.name) return alert("SKU and Name required.");
     setIsSaving(true);
-    try {
-      await addDoc(collection(db, "products"), { productName, sku: sku.toUpperCase(), laborCost: Number(laborCost), totalPartsCost: totalBOMCost, finalUnitCost: finalProductCost, bom: bomItems, createdAt: serverTimestamp() });
-      alert("✅ Master Product & BOM Saved Successfully!");
-    } catch (error) {
-      alert("✅ [DEMO MODE] Master Product & BOM Saved!");
-    } finally {
+
+    // Simulate Network Latency
+    setTimeout(() => {
+      console.log("DEMO MODE: Saved Product Object:", productData);
+      console.log("DEMO MODE: Saved BOM Items:", bomItems);
+      
       setIsSaving(false);
-    }
+      alert("DEMO MODE: Master Product and BOM saved successfully to console!");
+      if (typeof setView === "function") setView("home");
+    }, 1500);
   };
 
-  const totalBOMCost = bomItems.reduce((acc, item) => acc + (Number(item.qty) * Number(item.unitCost)), 0);
-  const finalProductCost = totalBOMCost + Number(laborCost);
+  const fieldStyle = { display: "flex", flexDirection: "column", gap: "5px" };
+  const inputStyle = { padding: "10px", borderRadius: "6px", border: `1px solid ${colors.border}`, outline: "none" };
 
   return (
-    <div style={{ maxWidth: "900px", margin: "0 auto", padding: "20px", fontFamily: "sans-serif" }}>
-      <header style={{ marginBottom: "30px" }}>
-        <h1 style={{ color: colors.textMain, fontSize: "32px", fontWeight: "900", margin: 0 }}>Master Product Record</h1>
-        <p style={{ color: colors.textMuted, margin: "5px 0 0 0" }}>Define manufactured goods and BOM requirements.</p>
-      </header>
+    <div style={{ maxWidth: "1100px", margin: "0 auto", padding: "40px", fontFamily: "Inter, sans-serif", color: colors.text }}>
+      
+      {/* DEMO HEADER BANNER */}
+      <div style={{ background: "#fef9c3", border: "1px solid #fde047", padding: "10px", borderRadius: "8px", marginBottom: "20px", fontSize: "14px", textAlign: "center", fontWeight: "bold", color: "#854d0e" }}>
+        🚀 You are in DEMO MODE. Database writes are simulated.
+      </div>
 
-      {/* 1. PRODUCT DETAILS */}
-      <div style={{ background: colors.cardBg, padding: "30px", borderRadius: "16px", boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)", marginBottom: "25px" }}>
-        <h2 style={{ fontSize: "18px", marginBottom: "20px", color: colors.textMain }}>General Information</h2>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px" }}>
-          <div>
-            <label style={{ display: "block", fontSize: "11px", fontWeight: "700", color: colors.textMuted, marginBottom: "8px", textTransform: "uppercase" }}>Product Name</label>
-            <input style={inputStyle} value={productName} onChange={(e) => setProductName(e.target.value)} />
-          </div>
-          <div>
-            <label style={{ display: "block", fontSize: "11px", fontWeight: "700", color: colors.textMuted, marginBottom: "8px", textTransform: "uppercase" }}>SKU / Model</label>
-            <input style={inputStyle} value={sku} onChange={(e) => setSku(e.target.value)} />
-          </div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "30px" }}>
+        <div>
+           <h1 style={{ margin: 0 }}>Master Product Record</h1>
+           <p style={{ color: "#64748b", margin: "5px 0 0 0" }}>Create or update manufacturing specifications</p>
+        </div>
+        <button onClick={handleSave} disabled={isSaving} style={{ padding: "12px 24px", background: colors.primary, color: "white", border: "none", borderRadius: "8px", fontWeight: "bold", cursor: "pointer", opacity: isSaving ? 0.7 : 1 }}>
+          {isSaving ? "Simulating Save..." : "💾 Save Product Record"}
+        </button>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "20px", background: "white", padding: "25px", borderRadius: "12px", boxShadow: "0 2px 10px rgba(0,0,0,0.05)" }}>
+        <div style={fieldStyle}>
+          <label style={{ fontSize: "12px", fontWeight: "bold", color: "#64748b" }}>Product Name</label>
+          <input style={inputStyle} value={productData.name} onChange={e => setProductData({...productData, name: e.target.value})} />
+        </div>
+        <div style={fieldStyle}>
+          <label style={{ fontSize: "12px", fontWeight: "bold", color: "#64748b" }}>SKU</label>
+          <input style={inputStyle} value={productData.sku} onChange={e => setProductData({...productData, sku: e.target.value})} />
+        </div>
+        <div style={fieldStyle}>
+          <label style={{ fontSize: "12px", fontWeight: "bold", color: "#64748b" }}>Type</label>
+          <select style={inputStyle} value={productData.type} onChange={e => setProductData({...productData, type: e.target.value})}>
+            <option value="manufactured">Manufactured</option>
+            <option value="purchased">Purchased</option>
+            <option value="service">Service</option>
+          </select>
+        </div>
+        <div style={fieldStyle}>
+          <label style={{ fontSize: "12px", fontWeight: "bold", color: "#64748b" }}>Category</label>
+          <input style={inputStyle} value={productData.category} onChange={e => setProductData({...productData, category: e.target.value})} />
+        </div>
+        <div style={fieldStyle}>
+          <label style={{ fontSize: "12px", fontWeight: "bold", color: "#64748b" }}>Unit of Measure</label>
+          <select style={inputStyle} value={productData.unit} onChange={e => setProductData({...productData, unit: e.target.value})}>
+            <option value="pcs">pcs</option>
+            <option value="kg">kg</option>
+            <option value="ft">ft</option>
+          </select>
+        </div>
+        <div style={fieldStyle}>
+          <label style={{ fontSize: "12px", fontWeight: "bold", color: "#64748b" }}>Status</label>
+          <select style={inputStyle} value={productData.status} onChange={e => setProductData({...productData, status: e.target.value})}>
+            <option value="active">Active</option>
+            <option value="inactive">Inactive</option>
+            <option value="archived">Archived</option>
+          </select>
         </div>
       </div>
 
-      {/* 2. BOM SECTION */}
-      <div style={{ background: colors.cardBg, padding: "30px", borderRadius: "16px", boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)", minHeight: "400px" }}>
-        <h2 style={{ fontSize: "18px", color: colors.textMain, marginBottom: "20px" }}>Bill of Materials (BOM)</h2>
-
-        <div style={{ marginBottom: "40px", position: "relative" }}>
-          <label style={{ display: "block", fontSize: "11px", fontWeight: "700", color: colors.textMuted, marginBottom: "8px", textTransform: "uppercase" }}>
-            Add Component
-          </label>
+      <div style={{ marginTop: "30px", background: "white", padding: "25px", borderRadius: "12px", boxShadow: "0 2px 10px rgba(0,0,0,0.05)" }}>
+        <h3 style={{ marginTop: 0 }}>Bill of Materials (BOM)</h3>
+        <p style={{ color: "#64748b", fontSize: "14px", marginBottom: "20px" }}>Define the raw materials and sub-assemblies required to build this product.</p>
+        
+        <div style={{ position: "relative", marginBottom: "20px" }}>
           <input 
-            style={inputStyle} 
-            placeholder="Search SKU..." 
-            value={searchTerm}
-            onFocus={() => setShowDropdown(true)}
-            onChange={(e) => searchInventory(e.target.value)}
+            style={{ ...inputStyle, width: "100%", boxSizing: "border-box", border: `2px solid ${colors.indigo}` }} 
+            placeholder="🔍 Search Demo Inventory (try 'Steel', 'Control', 'RM', 'SA')..." 
+            value={searchTerm} 
+            onChange={e => searchParts(e.target.value)} 
           />
-          
-          {showDropdown && searchResults.length > 0 && (
-            <div style={{ 
-              position: "absolute", top: "100%", left: 0, right: 0, 
-              background: "white", border: `1px solid ${colors.border}`, 
-              borderRadius: "8px", marginTop: "5px", 
-              boxShadow: "0 10px 25px rgba(0,0,0,0.15)", zIndex: 9999,
-              maxHeight: "250px", overflowY: "auto"
-            }}>
-              {searchResults.map(result => (
-                <div 
-                  key={result.id}
-                  onClick={() => addPartToBOM(result)}
-                  style={{ padding: "12px", cursor: "pointer", borderBottom: `1px solid ${colors.border}`, display: "flex", justifyContent: "space-between" }}
-                  onMouseEnter={(e) => e.currentTarget.style.background = colors.inputBg}
-                  onMouseLeave={(e) => e.currentTarget.style.background = "none"}
-                >
-                  <div>
-                    <div style={{ fontWeight: "700", color: colors.textMain, fontSize: "14px" }}>{result.partName}</div>
-                    <div style={{ fontSize: "12px", color: colors.textMuted }}>{result.sku}</div>
-                  </div>
-                  <div style={{ textAlign: "right" }}>
-                    <span style={{ fontWeight: "bold", color: colors.accentTeal }}>${result.cost.toFixed(2)}</span>
-                  </div>
+          {searchResults.length > 0 && (
+            <div style={{ position: "absolute", top: "100%", left: 0, right: 0, background: "white", border: `1px solid ${colors.border}`, zIndex: 10, borderRadius: "0 0 8px 8px", boxShadow: "0 10px 15px -3px rgba(0,0,0,0.1)" }}>
+              {searchResults.map(r => (
+                <div key={r.sku} onClick={() => addPartToBOM(r)} style={{ padding: "12px", cursor: "pointer", borderBottom: `1px solid ${colors.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span><strong>{r.sku}</strong> - {r.name}</span>
+                  <span style={{ fontSize: "10px", padding: "4px 8px", borderRadius: "12px", background: r.isSubAssembly ? "#e0e7ff" : "#f1f5f9", color: r.isSubAssembly ? colors.indigo : "#64748b" }}>{r.source}</span>
                 </div>
               ))}
-              <div 
-                onClick={() => setShowDropdown(false)} 
-                style={{ padding: "8px", textAlign: "center", fontSize: "11px", color: colors.accentIndigo, cursor: "pointer", background: colors.inputBg }}
-              >
-                Close Suggestions
-              </div>
             </div>
           )}
         </div>
 
-        <div style={{ position: "relative", zIndex: 1 }}>
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead>
-              <tr style={{ textAlign: "left", borderBottom: `2px solid ${colors.border}` }}>
-                <th style={{ padding: "12px", fontSize: "11px", color: colors.textMuted, textTransform: "uppercase" }}>Component</th>
-                <th style={{ padding: "12px", fontSize: "11px", color: colors.textMuted, textTransform: "uppercase", textAlign: "center" }}>Qty</th>
-                <th style={{ padding: "12px", fontSize: "11px", color: colors.textMuted, textTransform: "uppercase", textAlign: "right" }}>Total Cost</th>
-                <th style={{ width: "40px" }}></th>
+        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <thead>
+            <tr style={{ textAlign: "left", borderBottom: `2px solid ${colors.bg}`, color: "#64748b", fontSize: "13px" }}>
+              <th style={{ padding: "10px" }}>PART / SKU</th>
+              <th style={{ padding: "10px" }}>QTY REQ</th>
+              <th style={{ padding: "10px" }}>UNIT</th>
+              <th style={{ padding: "10px" }}>TYPE</th>
+              <th style={{ padding: "10px" }}>NOTES</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {bomItems.map((item, idx) => (
+              <tr key={idx} style={{ borderBottom: `1px solid ${colors.bg}` }}>
+                <td style={{ padding: "10px" }}>
+                  <div style={{ fontWeight: "bold" }}>{item.name}</div>
+                  <div style={{ fontSize: "12px", color: "#64748b" }}>{item.component_sku}</div>
+                </td>
+                <td>
+                  <input type="number" value={item.quantity_required} style={{ width: "60px", padding: "8px", borderRadius: "4px", border: `1px solid ${colors.border}` }} 
+                    onChange={e => {
+                      const up = [...bomItems]; up[idx].quantity_required = e.target.value; setBomItems(up);
+                    }} 
+                  />
+                </td>
+                <td style={{ fontSize: "14px", color: "#64748b" }}>{item.unit}</td>
+                <td style={{ fontSize: "12px" }}>
+                   <span style={{ padding: "2px 6px", borderRadius: "4px", background: item.sub_assembly ? "#fdf2f8" : "#f0fdf4", color: item.sub_assembly ? "#9d174d" : "#166534" }}>
+                      {item.sub_assembly ? "📦 Sub-Assy" : "🔧 Component"}
+                   </span>
+                </td>
+                <td>
+                  <input placeholder="Alt part #..." value={item.notes} style={{ ...inputStyle, padding: "5px", fontSize: "12px", width: "100%" }}
+                    onChange={e => {
+                      const up = [...bomItems]; up[idx].notes = e.target.value; setBomItems(up);
+                    }} 
+                  />
+                </td>
+                <td>
+                  <button onClick={() => setBomItems(bomItems.filter((_, i) => i !== idx))} style={{ color: "#ef4444", background: "none", border: "none", cursor: "pointer", fontSize: "18px" }}>✕</button>
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {bomItems.map(item => (
-                <tr key={item.id} style={{ borderBottom: `1px solid ${colors.border}` }}>
-                  <td style={{ padding: "12px" }}>
-                    <div style={{ fontWeight: "600", color: colors.textMain, fontSize: "14px" }}>{item.partName}</div>
-                    <div style={{ fontSize: "11px", color: colors.textMuted }}>{item.sku}</div>
-                  </td>
-                  <td style={{ padding: "12px", textAlign: "center" }}>
-                    <input 
-                      type="number" 
-                      value={item.qty} 
-                      onChange={(e) => setBomItems(bomItems.map(b => b.id === item.id ? {...b, qty: e.target.value} : b))}
-                      style={{ width: "50px", textAlign: "center", border: "1px solid #ddd", borderRadius: "4px", padding: "4px" }}
-                    />
-                  </td>
-                  <td style={{ padding: "12px", textAlign: "right", fontWeight: "700", color: colors.textMain }}>
-                    ${(Number(item.qty) * Number(item.unitCost)).toFixed(2)}
-                  </td>
-                  <td style={{ textAlign: "center" }}>
-                    <button onClick={() => removePart(item.id)} style={{ color: "#e11d48", border: "none", background: "none", cursor: "pointer" }}>✕</button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-
-          {bomItems.length === 0 && (
-            <div style={{ textAlign: "center", padding: "60px 0", color: colors.textMuted }}>
-              No components added yet. Use the search bar above.
-            </div>
-          )}
-        </div>
-
-        <div style={{ marginTop: "30px", padding: "20px", background: colors.inputBg, borderRadius: "12px", display: "flex", flexDirection: "column", gap: "10px", alignItems: "flex-end" }}>
-          <div style={{ fontSize: "14px", color: colors.textMuted }}>Total Parts Cost: <b>${totalBOMCost.toFixed(2)}</b></div>
-          <div style={{ fontSize: "14px", color: colors.textMuted }}>
-            Labor Cost: <input type="number" style={{ width: "80px", marginLeft: "10px", padding: "5px" }} value={laborCost} onChange={(e) => setLaborCost(e.target.value)} />
-          </div>
-          <div style={{ fontSize: "22px", fontWeight: "900", color: colors.accentTeal, marginTop: "10px", borderTop: `2px solid ${colors.border}`, paddingTop: "10px" }}>
-            Unit Cost: ${finalProductCost.toFixed(2)}
-          </div>
-        </div>
-
-        <button 
-          onClick={handleSaveProduct}
-          disabled={isSaving}
-          style={{ width: "100%", marginTop: "25px", padding: "15px", borderRadius: "12px", background: colors.accentTeal, color: "white", border: "none", fontWeight: "800", fontSize: "16px", cursor: "pointer" }}
-        >
-          {isSaving ? "Saving..." : "Save Master Product"}
-        </button>
+            ))}
+            {bomItems.length === 0 && (
+              <tr>
+                <td colSpan="6" style={{ textAlign: "center", padding: "40px", color: "#94a3b8", fontStyle: "italic" }}>No components added to BOM yet.</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
       </div>
     </div>
   );
